@@ -1939,8 +1939,7 @@ function updateBullets(dt){
             // Notify server: we hit this remote player
             wsSend({type:'hit_player', targetId:rp.socketId, damage:b.dmg,
               weapon:playerWeapon()?.def?.name||'?'});
-            showHitmarker(false);
-            SND.hitmark();
+            // Server will respond with a 'hitmarker' message — don't call showHitmarker here
             if(!b.boomerang) hit=true;
           }
         }
@@ -2577,6 +2576,14 @@ function showNotif(msg,dur=1800){
   const el=document.getElementById('hudNotif');
   el.textContent=msg; el.classList.add('show');
   clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),dur);
+}
+
+function showHitmarker(isKill){
+  const hm=document.getElementById('hudHitmarker');
+  hm.classList.toggle('kill', !!isKill);
+  hm.classList.add('show');
+  clearTimeout(hm._t);
+  hm._t=setTimeout(()=>hm.classList.remove('show'), isKill ? 300 : 100);
 }
 
 // ─── KILL FEED ─────────────────────────────────────────────────
