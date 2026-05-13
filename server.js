@@ -294,7 +294,7 @@ function handleMessage(ws, msg) {
     case 'bullet_fired': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
-      // Relay bullet to everyone else — fields are top-level on msg (not nested under msg.bullet)
+      // Relay bullet — fields are top-level on msg (not nested under msg.bullet)
       broadcast(room, {
         type: 'bullet_fired',
         socketId: player.socketId,
@@ -326,13 +326,13 @@ function handleMessage(ws, msg) {
 
     case 'player_hit':   // legacy name — fall through
     case 'hit_player': {
-      // Client reports a hit on another real (remote) player
+      // Client reports hitting a real remote player
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
       const targetRp = room.players.get(msg.targetId);
-      if (!targetRp || targetRp.dead) break; // ignore hits on already-dead players
+      if (!targetRp || targetRp.dead) break; // already dead, ignore
 
-      // Clamp damage to sane range to prevent abuse
+      // Clamp damage to prevent abuse
       const damage = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
 
       // Apply damage server-side
@@ -340,7 +340,7 @@ function handleMessage(ws, msg) {
         ? Math.min(targetRp.armor, Math.round(damage * 0.4))
         : 0;
       targetRp.armor = Math.max(0, targetRp.armor - absorbed);
-      targetRp.hp = Math.max(0, targetRp.hp - (damage - absorbed));
+      targetRp.hp   = Math.max(0, targetRp.hp - (damage - absorbed));
 
       const targetWs = getWsBySocketId(msg.targetId);
       if (targetWs) {
@@ -353,14 +353,12 @@ function handleMessage(ws, msg) {
       }
 
       const killed = targetRp.hp <= 0 && !targetRp.dead;
-      // Broadcast hitmarker back to the shooter
+      // Send hitmarker back to the shooter
       send(ws, { type: 'hitmarker', kill: killed });
 
       if (killed) {
-        // Mark victim dead so we don't double-process
-        targetRp.dead = true;
+        targetRp.dead = true; // mark now to prevent double-kill
 
-        // Update scores
         const killerScore = room.scores[player.socketId]
           || (room.scores[player.socketId] = { k: 0, d: 0, score: 0 });
         killerScore.k++;
@@ -372,9 +370,8 @@ function handleMessage(ws, msg) {
 
         const killerRp = room.players.get(player.socketId);
         if (killerRp) killerRp.kills = (killerRp.kills || 0) + 1;
-        if (targetRp) targetRp.deaths = (targetRp.deaths || 0) + 1;
+        targetRp.deaths = (targetRp.deaths || 0) + 1;
 
-        // Notify victim
         if (targetWs) {
           send(targetWs, {
             type: 'you_died',
@@ -384,7 +381,6 @@ function handleMessage(ws, msg) {
           });
         }
 
-        // Broadcast kill to room
         broadcast(room, {
           type: 'kill_event',
           killerId: player.socketId,
