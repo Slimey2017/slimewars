@@ -337,8 +337,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <div style="font-size:10px;color:#3a6a8a;margin-top:3px;" id="lobbyInfo"></div>
     </div>
     <div class="lobby-mode">
-      <button class="mdbtn on" id="btnFFA" onclick="setMode('ffa')">FREE FOR ALL</button>
-      <button class="mdbtn" id="btnTDM" onclick="setMode('tdm')">TEAM DEATHMATCH</button>
+      <button class="mdbtn on" id="btnFFA">FREE FOR ALL</button>
+      <button class="mdbtn" id="btnTDM">TEAM DEATHMATCH</button>
     </div>
     <button class="btn sm red" onclick="showScreen('sBrowser')">← LEAVE</button>
   </div>
@@ -606,7 +606,7 @@ function handleServerMsg(msg) {
       document.getElementById('lobbyName').textContent = msg.roomName;
       document.getElementById('lobbyInfo').textContent =
         `${msg.mode.toUpperCase()} · ${msg.players.length} players`;
-      setMode(msg.mode);
+      lockLobbyMode(msg.mode);
       renderRealLobbyPlayers(msg.players);
       if (msg.state === 'ingame') startGameFromLobby();
       break;
@@ -631,7 +631,7 @@ function handleServerMsg(msg) {
       break;
 
     case 'mode_changed':
-      setMode(msg.mode);
+      lockLobbyMode(msg.mode);
       break;
 
     case 'start_countdown':
@@ -662,11 +662,23 @@ function handleServerMsg(msg) {
 
     case 'bullet_fired':
       if (G.bullets && msg.socketId !== mySocketId) {
+        // Build a pseudo-owner so dealDamage / team checks never crash on undefined
+        const remoteOwner = remotePlayers[msg.socketId] || {};
+        const pseudoOwner = {
+          isPlayer: false,   // prevents infinite loops back into player-owned hit paths
+          name: remoteOwner.name || msg.socketId || 'REMOTE',
+          team: remoteOwner.team !== undefined ? remoteOwner.team : -1,
+          socketId: msg.socketId,
+          _isRemotePlayer: true,
+        };
         G.bullets.push({
           x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy,
-          dmg: msg.dmg, range: msg.range, traveled: 0,
+          dmg: msg.dmg, range: msg.range || 600, dist: 0,
+          owner: pseudoOwner,
           ownerId: msg.socketId, color: msg.color || '#ff0',
-          expl: msg.expl, flame: msg.flame, laser: msg.laser,
+          explosive: msg.expl || 0, expl: msg.expl || 0,
+          flame: msg.flame, laser: msg.laser,
+          active: true, r: msg.r || 3,
           fromRemote: true,
         });
       }
@@ -853,6 +865,7 @@ window.confirmJoinReal = function(){
     isReady = false;
     document.getElementById('readyBtn').textContent = 'READY UP';
     document.getElementById('readyBtn').style.borderColor = '';
+    lockLobbyMode(selectedServer.mode);
     return;
   }
   _origConfirmJoinReal();
@@ -1314,13 +1327,14 @@ function spawnBullet(owner,weapon,angle){
       const bColor=weapon.flame?'#ff6a00':weapon.laser?'#00ffff':weapon.poison?'#00ff88':weapon.boomerang?'#d4a017':undefined;
       // Broadcast bullet to server for multiplayer
       if(owner.isPlayer && currentRoomId){
-        wsSend({ type:'bullet_fired', bullet:{
+        wsSend({
+          type:'bullet_fired',
           x:owner.x+Math.cos(a)*owner.r, y:owner.y+Math.sin(a)*owner.r,
           vx:Math.cos(a)*weapon.bs, vy:Math.sin(a)*weapon.bs,
           dmg:weapon.dmg, range:weapon.range, r:pellets>1?2:3,
           expl:weapon.expl||0, color:bColor||'#ffe060',
           flame:weapon.flame||false, laser:weapon.laser||false,
-        }});
+        });
       }
       G.bullets.push({
         x:owner.x+Math.cos(a)*owner.r, y:owner.y+Math.sin(a)*owner.r,
@@ -1913,13 +1927,36 @@ function updateBullets(dt){
           if(!b.boomerang) hit=true; // boomerang can keep going
         }
       }
-      // Player
-      if(!hit&&!b.owner.isPlayer&&!G.player.dead){
-        const same=gameMode==='tdm'&&b.owner.team===G.player.team;
-        if(!same&&Math.hypot(G.player.x-b.x,G.player.y-b.y)<G.player.r){
-          if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner); else dealDamage(b.owner,G.player,b.dmg);
-          if(b.poison){ G.player._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
-          if(!b.boomerang) hit=true;
+      // Fix 1a: Remote multiplayer players as targets for local player bullets
+      if(!hit&&b.owner.isPlayer&&currentRoomId){
+        const remoteArr=Object.values(remotePlayers);
+        for(let ri=0;ri<remoteArr.length&&!hit;ri++){
+          const rp=remoteArr[ri];
+          if(!rp||rp.dead||!rp.x)continue;
+          if(gameMode==='tdm'&&rp.team===b.owner.team)continue;
+          const rpR=18;
+          if(Math.hypot(rp.x-b.x,rp.y-b.y)<rpR){
+            // Notify server: we hit this remote player
+            wsSend({type:'hit_player', targetId:rp.socketId, damage:b.dmg,
+              weapon:playerWeapon()?.def?.name||'?'});
+            showHitmarker(false);
+            SND.hitmark();
+            if(!b.boomerang) hit=true;
+          }
+        }
+      }
+      // Player — hit by NPC bullets OR remote player bullets (fromRemote)
+      if(!hit&&!G.player.dead){
+        const ownerIsRemote = b.fromRemote;
+        const ownerIsNPC = !b.owner.isPlayer && !b.fromRemote;
+        if(ownerIsNPC || ownerIsRemote){
+          const ownerTeam = b.owner?.team;
+          const same=gameMode==='tdm'&&ownerTeam===G.player.team;
+          if(!same&&Math.hypot(G.player.x-b.x,G.player.y-b.y)<G.player.r){
+            if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner||{isPlayer:false,team:-1}); else dealDamage(b.owner||{isPlayer:false,team:-1,name:'REMOTE'},G.player,b.dmg);
+            if(b.poison){ G.player._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
+            if(!b.boomerang) hit=true;
+          }
         }
       }
       // Sentry targets
@@ -2684,6 +2721,7 @@ function initLobby(srv){
   document.getElementById('lobbyInfo').textContent=`${srv.map} · ${srv.players}/${srv.maxPlayers} players`;
   document.getElementById('lobbyUsername').value=playerName;
   setMode(srv.mode||'ffa');
+  lockLobbyMode(srv.mode||'ffa');
   lobbyPlayers=[];
   const used=new Set();
   for(let i=0;i<srv.players-1;i++){
@@ -2737,7 +2775,33 @@ function toggleReady(){
   if(currentRoomId){ wsSend({type:'set_ready',ready:isReady}); }
   else renderLobbyPlayers();
 }
-function setMode(m){ gameMode=m; G.mode=m; document.getElementById('btnFFA').classList.toggle('on',m==='ffa'); document.getElementById('btnTDM').classList.toggle('on',m==='tdm'); G.scoreLimit=m==='tdm'?50:30; }
+function setMode(m){
+  gameMode=m; G.mode=m;
+  document.getElementById('btnFFA').classList.toggle('on',m==='ffa');
+  document.getElementById('btnTDM').classList.toggle('on',m==='tdm');
+  G.scoreLimit=m==='tdm'?50:30;
+}
+function lockLobbyMode(m){
+  setMode(m);
+  const ffa=document.getElementById('btnFFA');
+  const tdm=document.getElementById('btnTDM');
+  // Remove any leftover onclick and make them non-interactive
+  ffa.onclick=null; tdm.onclick=null;
+  ffa.style.cursor='default'; tdm.style.cursor='default';
+  ffa.style.opacity= m==='ffa' ? '1' : '0.28';
+  tdm.style.opacity= m==='tdm' ? '1' : '0.28';
+  ffa.title='Mode is locked — set at room creation';
+  tdm.title='Mode is locked — set at room creation';
+  // Small lock badge on active button
+  const active = m==='ffa' ? ffa : tdm;
+  if(!active.querySelector('.mode-lock-icon')){
+    const lk=document.createElement('span');
+    lk.className='mode-lock-icon';
+    lk.textContent=' 🔒';
+    lk.style.fontSize='10px';
+    active.appendChild(lk);
+  }
+}
 
 // ─── START GAME ────────────────────────────────────────────────
 function startGameFromLobby(){
