@@ -246,11 +246,8 @@ function handleMessage(ws, msg) {
     }
 
     case 'set_mode': {
-      const room = getPlayerRoom(player);
-      if (!room || room.state !== 'lobby') break;
-      room.mode = msg.mode === 'tdm' ? 'tdm' : 'ffa';
-      room.scoreLimit = room.mode === 'tdm' ? 50 : 30;
-      broadcast(room, { type: 'mode_changed', mode: room.mode });
+      // Mode is locked at room creation — reject any attempt to change it
+      send(ws, { type: 'error', msg: 'Game mode is locked and cannot be changed after room creation.' });
       break;
     }
 
@@ -297,11 +294,19 @@ function handleMessage(ws, msg) {
     case 'bullet_fired': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
-      // Relay bullet to everyone else
+      // Relay bullet to everyone else — fields are top-level on msg (not nested under msg.bullet)
       broadcast(room, {
         type: 'bullet_fired',
         socketId: player.socketId,
-        ...msg.bullet,
+        x: msg.x, y: msg.y,
+        vx: msg.vx, vy: msg.vy,
+        dmg: msg.dmg,
+        range: msg.range,
+        r: msg.r,
+        expl: msg.expl,
+        color: msg.color,
+        flame: msg.flame,
+        laser: msg.laser,
       }, ws);
       break;
     }
@@ -319,21 +324,79 @@ function handleMessage(ws, msg) {
       break;
     }
 
-    case 'player_hit': {
-      // Client reports a hit on another player
+    case 'player_hit':   // legacy name — fall through
+    case 'hit_player': {
+      // Client reports a hit on another real (remote) player
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
+      const targetRp = room.players.get(msg.targetId);
+      if (!targetRp || targetRp.dead) break; // ignore hits on already-dead players
+
+      // Clamp damage to sane range to prevent abuse
+      const damage = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
+
+      // Apply damage server-side
+      const absorbed = targetRp.armor > 0
+        ? Math.min(targetRp.armor, Math.round(damage * 0.4))
+        : 0;
+      targetRp.armor = Math.max(0, targetRp.armor - absorbed);
+      targetRp.hp = Math.max(0, targetRp.hp - (damage - absorbed));
+
       const targetWs = getWsBySocketId(msg.targetId);
       if (targetWs) {
         send(targetWs, {
           type: 'you_hit',
-          damage: msg.damage,
+          damage,
           attackerId: player.socketId,
           weapon: msg.weapon,
         });
       }
-      // Broadcast hitmarker to attacker
-      send(ws, { type: 'hitmarker', kill: false });
+
+      const killed = targetRp.hp <= 0 && !targetRp.dead;
+      // Broadcast hitmarker back to the shooter
+      send(ws, { type: 'hitmarker', kill: killed });
+
+      if (killed) {
+        // Mark victim dead so we don't double-process
+        targetRp.dead = true;
+
+        // Update scores
+        const killerScore = room.scores[player.socketId]
+          || (room.scores[player.socketId] = { k: 0, d: 0, score: 0 });
+        killerScore.k++;
+        killerScore.score += 100;
+
+        const victimScore = room.scores[msg.targetId]
+          || (room.scores[msg.targetId] = { k: 0, d: 0, score: 0 });
+        victimScore.d++;
+
+        const killerRp = room.players.get(player.socketId);
+        if (killerRp) killerRp.kills = (killerRp.kills || 0) + 1;
+        if (targetRp) targetRp.deaths = (targetRp.deaths || 0) + 1;
+
+        // Notify victim
+        if (targetWs) {
+          send(targetWs, {
+            type: 'you_died',
+            killerId: player.socketId,
+            killerName: player.name,
+            weapon: msg.weapon,
+          });
+        }
+
+        // Broadcast kill to room
+        broadcast(room, {
+          type: 'kill_event',
+          killerId: player.socketId,
+          killerName: player.name,
+          victimId: msg.targetId,
+          victimName: targetRp.name || '???',
+          weapon: msg.weapon,
+          scores: room.scores,
+        });
+
+        checkWinCondition(room);
+      }
       break;
     }
 
@@ -347,7 +410,7 @@ function handleMessage(ws, msg) {
         killerRp.kills = (killerRp.kills || 0) + 1;
         if (!room.scores[player.socketId]) room.scores[player.socketId] = { k: 0, d: 0, score: 0 };
         room.scores[player.socketId].k++;
-        room.scores[player.socketId].score++;
+        room.scores[player.socketId].score += 100;
       }
 
       const victimRp = room.players.get(msg.victimId);
@@ -591,18 +654,18 @@ function checkWinCondition(room) {
   if (room.mode === 'ffa') {
     let winner = null;
     Object.entries(room.scores).forEach(([sid, s]) => {
-      if (s.score >= room.scoreLimit) winner = sid;
+      if (s.k >= room.scoreLimit) winner = sid;
     });
     if (winner) {
       const wp = room.players.get(winner);
       endGame(room, wp ? wp.name : 'Unknown', winner);
     }
   } else {
-    // TDM — sum team scores
+    // TDM — sum kill counts per team
     const team = { 0: 0, 1: 0 };
     Object.entries(room.scores).forEach(([sid, s]) => {
       const p = room.players.get(sid);
-      if (p) team[p.team] = (team[p.team] || 0) + s.score;
+      if (p) team[p.team] = (team[p.team] || 0) + s.k;
     });
     if (team[0] >= room.scoreLimit) endGame(room, 'BLUE TEAM', null);
     else if (team[1] >= room.scoreLimit) endGame(room, 'RED TEAM', null);
