@@ -700,45 +700,6 @@ function endGame(room, winnerName, winnerSocketId) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────
-
-function applyExplosionDamage(room, sourceId, x, y, radius, damage, isNuke = false) {
-  room.players.forEach((p, sid) => {
-    if (p.dead) return;
-
-    const dist = Math.hypot(p.x - x, p.y - y);
-    
-    if (isNuke || dist < radius) {
-      const finalDamage = isNuke ? 999 : damage * (1 - dist / radius);
-      p.hp -= finalDamage;
-
-      if (p.hp <= 0) {
-        p.hp = 0;
-        p.dead = true;
-        
-        // Update stats and broadcast kill
-        const killer = room.players.get(sourceId);
-        if (killer && sid !== sourceId) {
-          killer.kills++;
-          if (room.scores[sourceId]) room.scores[sourceId].k++;
-          
-          broadcast(room, {
-            type: 'kill_event',
-            killerId: sourceId,
-            killerName: killer.name,
-            victimId: sid,
-            victimName: p.name,
-            weapon: isNuke ? '☢️ NUKE' : '🚀 EXPLOSION',
-            scores: room.scores
-          });
-          checkWinCondition(room);
-        }
-      }
-    }
-  });
-}
-
-// ... existing getPlayerRoom function ...
-
 function getPlayerRoom(player) {
   if (!player.roomId) return null;
   return rooms.get(player.roomId) || null;
