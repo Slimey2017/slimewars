@@ -190,8 +190,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #hudHitmarker.kill svg line{stroke:#f44;}
 
 /* Scorestreak HUD */
-#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:10;}
-.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;pointer-events:auto;}
+#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
+.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;}
 .streak-hud.ready{border-color:var(--orange);box-shadow:0 0 12px rgba(249,115,22,.3);animation:streakPulse .8s infinite;}
 @keyframes streakPulse{0%,100%{box-shadow:0 0 8px rgba(249,115,22,.3);}50%{box-shadow:0 0 20px rgba(249,115,22,.6);}}
 .sh-icon{font-size:20px;}
@@ -299,6 +299,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
     <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
   </div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+    <span style="font-size:10px;color:#3a6a8a;letter-spacing:2px;">USERNAME</span>
+    <input id="menuUsername" value="SlimeyPlayer" maxlength="16"
+      style="width:170px;padding:6px 9px;background:rgba(0,0,0,.5);border:1px solid #1e3a5a;border-bottom-color:#3af;color:#7ad;font-family:'Share Tech Mono';font-size:13px;outline:none;"
+      oninput="playerName=this.value.trim()||'SlimeyPlayer';document.getElementById('custPreviewName').textContent=playerName;">
+  </div>
   <div class="menu-status">SERVER: <span class="online">ONLINE</span> &nbsp;|&nbsp; ONLINE: <span class="count" id="onlinePcount">0</span> &nbsp;|&nbsp; <span id="menuMuteBtn" onclick="toggleMute()" style="cursor:pointer;color:#39ff14;letter-spacing:2px;">🔊 MUSIC</span></div>
 </div>
 
@@ -356,8 +362,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
   <div class="lobby-ft">
     <div class="unrow">
-      <span class="un-lbl">USERNAME</span>
-      <input id="lobbyUsername" value="SlimeyPlayer" maxlength="16" style="width:170px;padding:6px 9px;background:rgba(0,0,0,.5);border:1px solid var(--border);border-bottom-color:#3af;color:#7ad;font-family:'Share Tech Mono';font-size:13px;outline:none;">
+      <span class="un-lbl">PLAYING AS</span>
+      <span id="lobbyUsernameDisplay" style="color:#7ad;font-family:'Share Tech Mono';font-size:13px;letter-spacing:1px;">SlimeyPlayer</span>
     </div>
     <span class="plcount" id="readyCount">0/0 ready</span>
     <button class="btn" id="readyBtn" onclick="toggleReady()">READY UP</button>
@@ -688,22 +694,29 @@ function handleServerMsg(msg) {
       if (G.explosions) G.explosions.push({ x: msg.x, y: msg.y, r: 10, maxR: msg.radius || 80, alpha: 1, fromRemote: true });
       break;
 
-    case 'you_hit':
-      if (G.player && !G.player.dead) {
-        const dmg = msg.damage || 20;
-        const absorbed = Math.min(G.player.armor, Math.round(dmg * 0.4));
-        G.player.armor -= absorbed;
-        G.player.hp -= (dmg - absorbed);
-        G.player.flicker = 0.6;
-        if (G.player.hp <= 0 && !G.player.dead) {
-          G.player.dead = true;
-          G.player.hp = 0;
-          wsSend({ type: 'player_killed',
-            victimId: mySocketId, victimName: playerName,
-            weapon: msg.weapon });
-        }
-      }
-      break;
+    c//
+case 'you_hit':
+  // Add a check to ensure G.player is defined first
+  if (G.player && !G.player.dead) { 
+    const dmg = msg.damage || 20;
+    const absorbed = Math.min(G.player.armor, Math.round(dmg * 0.4));
+    G.player.armor -= absorbed;
+    G.player.hp -= (dmg - absorbed);
+    G.player.flicker = 0.6;
+    
+    // Check for death
+    if (G.player.hp <= 0 && !G.player.dead) {
+      G.player.dead = true;
+      G.player.hp = 0;
+      wsSend({ 
+        type: 'player_killed', 
+        victimId: mySocketId, 
+        victimName: playerName, 
+        weapon: msg.weapon 
+      });
+    }
+  }
+  break;
 
     case 'you_died':
       if (G.player) {
@@ -715,6 +728,29 @@ function handleServerMsg(msg) {
     case 'hitmarker':
       showHitmarker(msg.kill);
       if (msg.kill) SND.kill(); else SND.hitmark();
+      break;
+
+    case 'kill_confirmed':
+      // Server confirmed an NPC kill reported by this client
+      if (G.player) {
+        G.player.kills = (G.player.kills || 0) + 1;
+        G.player.nukeKills = (G.player.nukeKills || 0) + 1;
+        // Progress streaks
+        selectedStreaks.forEach((sid,i)=>{
+          const def=STREAKS_DEFS.find(s=>s.id===sid); if(!def)return;
+          G.player.streakScores[i]++;
+          if(G.player.streakScores[i]>=def.kills&&!G.player.streakActive[i]){
+            G.player.streakActive[i]=true;
+            showNotif(`🎯 ${def.name.toUpperCase()} READY!`);
+            SND.streak_ready();
+          }
+        });
+        if(nukeEnabled&&G.player.nukeKills>=8&&!G.nukeReady){
+          G.nukeReady=true;
+          showNotif('☢️ NUKE READY! Press N to target!',3000);
+          SND.streak_ready();
+        }
+      }
       break;
 
     case 'kill_event':
@@ -790,7 +826,7 @@ function populateRealServers(rooms) {
 
 function joinRealRoom(roomId) {
   if (!wsConnected) { showNotif('⚠️ Not connected to server'); return; }
-  playerName = document.getElementById('lobbyUsername')?.value || playerName;
+  playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
   selectedServer = { isReal: true, roomId };
   showScreen('sStreakSelect');
 }
@@ -805,7 +841,8 @@ function confirmJoinReal() {
   });
   showScreen('sLobby');
   if (lobbyInterval) { clearInterval(lobbyInterval); lobbyInterval = null; }
-  document.getElementById('lobbyUsername').value = playerName;
+  const disp = document.getElementById('lobbyUsernameDisplay');
+  if (disp) disp.textContent = playerName;
   document.getElementById('chatMsgs').innerHTML = '';
   isReady = false;
   document.getElementById('readyBtn').textContent = 'READY UP';
@@ -842,7 +879,7 @@ function createNewRoom(){
   if(!wsConnected){ showNotif('⚠️ Not connected to server'); return; }
   const name = prompt('Room name (leave blank for auto):', '') || '';
   const mode = confirm('Team Deathmatch? (Cancel = FFA)') ? 'tdm' : 'ffa';
-  playerName = document.getElementById('lobbyUsername')?.value || playerName;
+  playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
   selectedServer = { isReal: true, creating: true, name, mode };
   showScreen('sStreakSelect');
 }
@@ -860,7 +897,8 @@ window.confirmJoinReal = function(){
     });
     showScreen('sLobby');
     if(lobbyInterval){ clearInterval(lobbyInterval); lobbyInterval = null; }
-    document.getElementById('lobbyUsername').value = playerName;
+    const disp = document.getElementById('lobbyUsernameDisplay');
+    if(disp) disp.textContent = playerName;
     document.getElementById('chatMsgs').innerHTML = '';
     isReady = false;
     document.getElementById('readyBtn').textContent = 'READY UP';
@@ -1231,26 +1269,27 @@ function createNPC(x,y,team){
   const skill=Math.random(); // 0=easy, 1=hard
   return {
     x,y,r:18,hp:100,maxHp:100,armor:0,
-    angle:0,skin:Math.floor(Math.random()*BODY_COLORS.length),
+    angle:Math.random()*Math.PI*2,
+    skin:Math.floor(Math.random()*BODY_COLORS.length),
     hat:HATS[Math.floor(Math.random()*HATS.length)]?.icon,
     face:FACES[Math.floor(Math.random()*FACES.length)]?.icon,
     team:team!==undefined?team:Math.floor(Math.random()*2),
     inv:[makeSlot(0),makeSlot(wIdx),null,null,null],
     slotIdx:1,
     fireCooldown:Math.random()*500,
-    aiTimer:Math.random()*60,
-    aiState:'patrol',      // patrol|chase|cover|retreat|peek
+    aiTimer:0, // start immediately active
+    aiState:'chase', // start in chase — no idle standing
     coverPos:null,
     coverTimer:0,
     peekTimer:0,
-    peekPhase:false,       // false=behind cover, true=peeking
+    peekPhase:false,
     lastSeenPos:null,
     flicker:0,dead:false,respawnTimer:0,
     kills:0,deaths:0,isPlayer:false,
     name:NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],
-    skill,                 // affects aim, reaction, peeking
-    squad:null,            // for TDM squad coordination
-    moveNoise:{x:0,y:0},
+    skill,
+    squad:null,
+    moveNoise:{x:(Math.random()-.5),y:(Math.random()-.5)},
     eyeSway:0,
     sprint:false,
   };
@@ -1356,13 +1395,12 @@ function spawnBullet(owner,weapon,angle){
 }
 
 function getMeleeTargets(owner){
-  const player = G.player;
-  if(gameMode==='tdm') return (owner.isPlayer?G.npcs:[...(player?[player]:[]),...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
-  return owner.isPlayer?G.npcs.filter(n=>!n.dead):[...(player?[player]:[]),...G.npcs.filter(n=>n!==owner&&!n.dead)];
+  if(gameMode==='tdm') return (owner.isPlayer?G.npcs:[G.player,...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
+  return owner.isPlayer?G.npcs.filter(n=>!n.dead):[G.player,...G.npcs.filter(n=>n!==owner&&!n.dead)];
 }
 
 function dealDamage(attacker,victim,dmg){
-  if(!victim||victim.dead)return;
+  if(victim.dead)return;
   // Armor absorbs 40%
   if(victim.armor>0){
     const absorbed=Math.min(victim.armor,dmg*.4|0);
@@ -1400,6 +1438,19 @@ function explode(x,y,radius,dmg,owner){
     const d=Math.hypot(e.x-x,e.y-y);
     if(d<radius+e.r){ const falloff=1-d/radius; dealDamage(owner||{name:'EXPLOSION',isPlayer:false,team:-1},e,(dmg*falloff)|0); }
   });
+  // Notify server about remote players caught in explosion (multiplayer)
+  if(owner&&owner.isPlayer&&currentRoomId){
+    Object.values(remotePlayers).forEach(rp=>{
+      if(!rp||rp.dead||!rp.x)return;
+      if(gameMode==='tdm'&&rp.team===owner.team)return;
+      const d=Math.hypot(rp.x-x,rp.y-y);
+      if(d<radius+18){
+        const falloff=1-d/radius;
+        const exDmg=Math.max(1,(dmg*falloff)|0);
+        wsSend({type:'hit_player',targetId:rp.socketId,damage:exDmg,weapon:'EXPLOSION'});
+      }
+    });
+  }
 }
 
 function killEntity(killer,victim){
@@ -1416,7 +1467,7 @@ function killEntity(killer,victim){
   if(!G.scores[vn])G.scores[vn]={k:0,d:0,score:0};
   G.scores[kn].k++;G.scores[kn].score+=100;
   G.scores[vn].d++;
-  if(killer.isPlayer&&G.player){
+  if(killer.isPlayer){
     G.player.kills++;
     G.player.nukeKills=(G.player.nukeKills||0)+1;
     // Report kill to server in multiplayer
@@ -1445,7 +1496,7 @@ function killEntity(killer,victim){
     });
     SND.kill();
   }
-  if(victim.isPlayer&&G.player) G.player.deaths++;
+  if(victim.isPlayer) G.player.deaths++;
   addKillFeed(kn,vn);
   if(Math.random()<.2) addGChat(NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],GAME_CHAT_MSGS[Math.floor(Math.random()*GAME_CHAT_MSGS.length)]);
   checkWin();
@@ -1492,7 +1543,7 @@ function showGameOver(winnerName, scores){
 function getNearestEnemy(npc){
   let best=null,bestD=Infinity;
   let cands;
-  if(gameMode==='ffa') cands=[...(G.player&&!G.player.dead?[G.player]:[]),...G.npcs.filter(n=>n!==npc&&!n.dead)];
+  if(gameMode==='ffa') cands=[G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)];
   else {
     const others=G.npcs.filter(n=>n!==npc&&!n.dead&&n.team!==npc.team);
     cands=G.player&&!G.player.dead&&G.player.team!==npc.team?[G.player,...others]:others;
@@ -1549,7 +1600,7 @@ function updateNPC(npc,dt){
   if(npc.dead){
     npc.respawnTimer-=dt;
     if(npc.respawnTimer<=0){
-      const sp=getSpawnPoint([...(G.player?[G.player]:[]),...G.npcs.filter(n=>n!==npc&&!n.dead)]);
+      const sp=getSpawnPoint([G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)]);
       npc.x=sp.x;npc.y=sp.y;npc.hp=npc.maxHp;npc.armor=0;npc.dead=false;npc.flicker=0;
       npc.inv=[makeSlot(0),makeSlot(1+Math.floor(Math.random()*(WEAPONS_BASE.length-1))),null,null,null];
       npc.slotIdx=1; npc.aiState='patrol';
@@ -1576,10 +1627,18 @@ function updateNPC(npc,dt){
   if(!target){ npc.aiState='patrol'; }
 
   if(npc.aiState==='patrol'){
-    npc.aiTimer-=dt;
-    if(npc.aiTimer<=0){ npc.aiTimer=1.5+Math.random()*2; npc.moveNoise={x:(Math.random()-.5),y:(Math.random()-.5)}; }
-    moveWithCollision(npc,npc.moveNoise.x*70*dt,npc.moveNoise.y*70*dt);
-    if(target) npc.aiState='chase';
+    // If there's any valid target, immediately give chase — no standing around
+    if(target){ npc.aiState='chase'; }
+    else {
+      // Wander toward random map center area
+      npc.aiTimer-=dt;
+      if(npc.aiTimer<=0){
+        npc.aiTimer=1+Math.random()*1.5;
+        npc.moveNoise={x:(Math.random()-.5),y:(Math.random()-.5)};
+      }
+      // Always moving — 120px/s minimum
+      moveWithCollision(npc,npc.moveNoise.x*120*dt,npc.moveNoise.y*120*dt);
+    }
     return;
   }
 
@@ -1817,7 +1876,7 @@ function switchWeapon(idx){
 }
 
 function activateStreak(idx){
-  if(!G.player||!G.player.streakActive[idx])return;
+  if(!G.player.streakActive[idx])return;
   const sid=selectedStreaks[idx];
   if(!sid)return;
   if(sid==='uav'){ G.uavActive=true; G.uavTimer=12; SND.uav(); showNotif('🛰️ UAV ONLINE'); }
@@ -1872,7 +1931,7 @@ function triggerNukeAt(wx,wy){
   // Reset streak
   const idx=selectedStreaks.indexOf('nuke');
   if(idx>=0){ G.player.streakActive[idx]=false; G.player.streakScores[idx]=0; }
-  G.nukeReady=false; if(G.player) G.player.nukeKills=0;
+  G.nukeReady=false; G.player.nukeKills=0;
 }
 
 function detonateNuke(){
@@ -1946,7 +2005,7 @@ function updateBullets(dt){
         }
       }
       // Player — hit by NPC bullets OR remote player bullets (fromRemote)
-      if(!hit&&G.player&&!G.player.dead){
+      if(!hit&&!G.player.dead){
         const ownerIsRemote = b.fromRemote;
         const ownerIsNPC = !b.owner.isPlayer && !b.fromRemote;
         if(ownerIsNPC || ownerIsRemote){
@@ -2298,10 +2357,11 @@ function drawEntity(e){
     ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(bx,by+6,bw,3);
     ctx.fillStyle='#3af'; ctx.fillRect(bx,by+6,bw*(e.armor/e.maxArmor),3);
   }
-  // Name
+  // Name — always use current playerName for local player
+  const displayName = e.isPlayer ? playerName : e.name;
   ctx.fillStyle=e.isPlayer?'#ffe000':'#ccc';
   ctx.font="bold 11px 'Share Tech Mono'"; ctx.textAlign='center';
-  ctx.fillText((e.isPlayer?'[YOU] ':'')+e.name,e.x,by-4);
+  ctx.fillText((e.isPlayer?'[YOU] ':'')+displayName,e.x,by-4);
   ctx.textAlign='left';
   // UAV ping indicator
   if(G.uavActive&&!e.isPlayer){
@@ -2402,7 +2462,7 @@ function updateHUD(){
       <div class="sh-progress">${ready?'READY!':`${G.player.streakScores[i]}/${def.kills}`}</div>
       <div class="sh-bar"><div class="sh-barfill" style="width:${prog*100}%"></div></div>
     </div>`;
-  }).join('')+(nukeEnabled?`<div class="streak-hud${G.nukeReady?' ready':''}" onclick="if(G.nukeReady)beginNukeTargeting()" title="${G.nukeReady?'Press N or click to launch NUKE!':'Kill streak: '+Math.min(G.player.nukeKills||0,8)+'/8'}">
+  }).join('')+(nukeEnabled&&!selectedStreaks.includes('nuke')?`<div class="streak-hud${G.nukeReady?' ready':''}" onclick="if(G.nukeReady)beginNukeTargeting()" title="${G.nukeReady?'Press N or click to launch NUKE!':'Kill streak: '+Math.min(G.player.nukeKills||0,8)+'/8'}">
     <div class="sh-icon">☢️</div>
     <div class="sh-name">NUKE</div>
     <div class="sh-progress" style="color:${G.nukeReady?'#f44':'var(--orange)'}">${G.nukeReady?'LAUNCH!':`${Math.min(G.player.nukeKills||0,8)}/8`}</div>
@@ -2422,10 +2482,13 @@ function updateHUD(){
     document.getElementById('sbRows').innerHTML=`<div class="sb-row" style="font-size:9px;color:#3a6a8a;border-bottom:1px solid var(--border);margin-bottom:4px;"><span style="width:28px"></span><span style="flex:1">NAME</span><span style="width:44px;text-align:right">K</span><span style="width:44px;text-align:right">D</span><span style="width:40px;text-align:right">K/D</span></div>`
       +rows.map((r,i)=>{
         const kd=r[1].d>0?(r[1].k/r[1].d).toFixed(1):'∞';
-        const isYou=r[0]===playerName;
-        return `<div class="sb-row${isYou?' '+`style="color:var(--orange)"`:''}">
+        // Resolve display name: could be socketId (online) or NPC name (offline)
+        const isMe = r[0]===mySocketId || r[0]===playerName;
+        const rp = remotePlayers[r[0]];
+        const displayName = isMe ? playerName : (rp?.name || r[1].name || r[0].slice(0,12));
+        return `<div class="sb-row">
           <span class="sb-rank">#${i+1}</span>
-          <span class="sb-name" style="${isYou?'color:var(--orange)':''}">${r[0]}${isYou?' ◀':''}</span>
+          <span class="sb-name" style="${isMe?'color:var(--orange)':''}">${displayName}${isMe?' ◀':''}</span>
           <span class="sb-k">${r[1].k}</span><span class="sb-d">${r[1].d}</span>
           <span class="sb-kd">${kd}</span>
         </div>`;
@@ -2547,9 +2610,7 @@ document.addEventListener('mousemove',e=>{
 document.addEventListener('mousedown',e=>{
   if(e.button===0){
     mouse.down=true;
-    // Don't shoot if clicking on a HUD interactive element
-    const hudClick = e.target.closest('#hudStreaks,#hudWeapons,#hudMute,#gchat,#hudNuke,#hudRespawn,#hudGO,#hudSB');
-    if(document.getElementById('sGame').classList.contains('active')&&G.player&&!G.player.dead&&!G.gameOver&&!hudClick){
+    if(document.getElementById('sGame').classList.contains('active')&&G.player&&!G.player.dead&&!G.gameOver){
       if(AC.state==='suspended')AC.resume();
       // Nuke targeting click
       if(nukeTargetMode&&nukeCountdown<0){
@@ -2729,7 +2790,8 @@ function initLobby(srv){
   document.getElementById('readyBtn').style.borderColor='';
   document.getElementById('lobbyName').textContent=srv.name;
   document.getElementById('lobbyInfo').textContent=`${srv.map} · ${srv.players}/${srv.maxPlayers} players`;
-  document.getElementById('lobbyUsername').value=playerName;
+  const disp=document.getElementById('lobbyUsernameDisplay');
+  if(disp) disp.textContent=playerName;
   setMode(srv.mode||'ffa');
   lockLobbyMode(srv.mode||'ffa');
   lobbyPlayers=[];
@@ -2756,7 +2818,7 @@ function lobbyTickFn(){
   }
   if(gameStartCountdown>0){ gameStartCountdown--; if(!gameStartCountdown){startGameFromLobby();return;} addLobbyMsg('SERVER',`Starting in ${gameStartCountdown}...`); }
   renderLobbyPlayers();
-  playerName=document.getElementById('lobbyUsername').value||'SlimeyPlayer';
+  // playerName is set from menuUsername — no need to read from lobby
 }
 function renderLobbyPlayers(){
   const all=[{name:playerName,skin:playerSkin,ready:isReady,isNPC:false},...lobbyPlayers];
@@ -2816,7 +2878,7 @@ function lockLobbyMode(m){
 // ─── START GAME ────────────────────────────────────────────────
 function startGameFromLobby(){
   if(lobbyInterval){clearInterval(lobbyInterval);lobbyInterval=null;}
-  playerName=document.getElementById('lobbyUsername').value||'SlimeyPlayer';
+  // playerName already set from menuUsername — don't override from a removed input
   showScreen('sGame'); setupCanvas();
   G={mode:gameMode,scoreLimit:gameMode==='tdm'?50:30,
     player:null,npcs:[],bullets:[],explosions:[],dmgNums:[],
@@ -2834,10 +2896,12 @@ function startGameFromLobby(){
   G.player.name=playerName; G.player.skin=playerSkin;
   G.player.streakScores=[0,0]; G.player.streakActive=[false,false];
   G.cam={x:psp.x,y:psp.y};
-  G.scores[playerName]={k:0,d:0,score:0};
+  // Use socketId as key in online mode so server score updates merge properly
+  const myScoreKey = currentRoomId ? mySocketId : playerName;
+  G.scores[myScoreKey]={k:0,d:0,score:0,name:playerName};
   const npcCount=Math.max(lobbyPlayers.length,11);
   for(let i=0;i<npcCount;i++){
-    const sp=getSpawnPoint([...(G.player?[G.player]:[]),...G.npcs]);
+    const sp=getSpawnPoint([G.player,...G.npcs]);
     const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
     const npc=createNPC(sp.x,sp.y,team);
     if(i<lobbyPlayers.length){npc.name=lobbyPlayers[i].name;npc.skin=lobbyPlayers[i].skin;}
