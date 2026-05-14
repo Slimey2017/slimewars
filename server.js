@@ -360,13 +360,15 @@ function handleMessage(ws, msg) {
         targetRp.dead = true; // mark now to prevent double-kill
 
         const killerScore = room.scores[player.socketId]
-          || (room.scores[player.socketId] = { k: 0, d: 0, score: 0 });
+          || (room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name });
         killerScore.k++;
         killerScore.score += 100;
+        killerScore.name = player.name; // keep name fresh
 
         const victimScore = room.scores[msg.targetId]
-          || (room.scores[msg.targetId] = { k: 0, d: 0, score: 0 });
+          || (room.scores[msg.targetId] = { k: 0, d: 0, score: 0, name: targetRp.name });
         victimScore.d++;
+        victimScore.name = targetRp.name;
 
         const killerRp = room.players.get(player.socketId);
         if (killerRp) killerRp.kills = (killerRp.kills || 0) + 1;
@@ -400,20 +402,22 @@ function handleMessage(ws, msg) {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
 
-      // Update scores
+      // Update scores — store name so clients can resolve it
       const killerRp = room.players.get(player.socketId);
       if (killerRp) {
         killerRp.kills = (killerRp.kills || 0) + 1;
-        if (!room.scores[player.socketId]) room.scores[player.socketId] = { k: 0, d: 0, score: 0 };
+        if (!room.scores[player.socketId]) room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name };
         room.scores[player.socketId].k++;
         room.scores[player.socketId].score += 100;
+        room.scores[player.socketId].name = player.name;
       }
 
       const victimRp = room.players.get(msg.victimId);
       if (victimRp) {
         victimRp.deaths = (victimRp.deaths || 0) + 1;
-        if (!room.scores[msg.victimId]) room.scores[msg.victimId] = { k: 0, d: 0, score: 0 };
+        if (!room.scores[msg.victimId]) room.scores[msg.victimId] = { k: 0, d: 0, score: 0, name: victimRp.name };
         room.scores[msg.victimId].d++;
+        room.scores[msg.victimId].name = victimRp.name || msg.victimName;
       }
 
       // Notify victim to respawn
@@ -427,8 +431,8 @@ function handleMessage(ws, msg) {
         });
       }
 
-      // Tell attacker they got the kill
-      send(ws, { type: 'hitmarker', kill: true });
+      // Confirm kill back to attacker so client can update G.player.kills
+      send(ws, { type: 'kill_confirmed', victimName: msg.victimName, weapon: msg.weapon });
 
       // Broadcast kill to room
       broadcast(room, {
