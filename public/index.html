@@ -190,9 +190,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #hudHitmarker.kill svg line{stroke:#f44;}
 
 /* Scorestreak HUD */
-#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
-.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;}
-.streak-hud.ready{border-color:var(--orange);box-shadow:0 0 12px rgba(249,115,22,.3);animation:streakPulse .8s infinite;}
+#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto !important;}
+.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;position:relative;}
+.streak-hud:hover{border-color:#5a7aaa;background:rgba(10,25,60,.9);}
+.streak-hud.ready{border-color:var(--orange);box-shadow:0 0 12px rgba(249,115,22,.3);animation:streakPulse .8s infinite;cursor:pointer;}
+.streak-hud.ready:hover{box-shadow:0 0 22px rgba(249,115,22,.7);transform:scale(1.06);}
+.streak-hud.ready::after{content:'TAP';position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:var(--orange);letter-spacing:1px;white-space:nowrap;opacity:0.7;}
 @keyframes streakPulse{0%,100%{box-shadow:0 0 8px rgba(249,115,22,.3);}50%{box-shadow:0 0 20px rgba(249,115,22,.6);}}
 .sh-icon{font-size:20px;}
 .sh-name{font-size:8px;color:#6a8aaa;letter-spacing:1px;}
@@ -293,6 +296,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
   <div class="menu-nav">
     <button class="menu-btn primary" onclick="showScreen('sBrowser')">▶ PLAY ONLINE</button>
+    <button class="menu-btn" onclick="quickJoinOnline()" style="border-color:#1e4a2a;color:#b0d0b0;">⚡ QUICK JOIN</button>
     <button class="menu-btn" onclick="startSoloPractice()">🤖 SOLO PRACTICE</button>
     <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
     <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
@@ -479,8 +483,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="ammo-reload-bar"><div class="ammo-reload-fill" id="reloadBar" style="width:0%"></div></div>
   </div>
 
-  <!-- Streaks -->
-  <div class="hud" id="hudStreaks"></div>
+  <!-- Streaks — standalone div so pointer-events work without parent override -->
+  <div id="hudStreaks" style="position:absolute;"></div>
 
   <!-- Weapons -->
   <div class="hud" id="hudWeapons"></div>
@@ -544,7 +548,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
 
   <div id="hudFPS">60 FPS</div>
-</div>
+  <!-- Online status / ping -->
+  <div id="hudPing" style="display:none;position:absolute;top:16px;left:170px;font-size:10px;color:#2a4a6a;letter-spacing:1px;"></div>
 
 <script>
 'use strict';
@@ -694,8 +699,7 @@ function handleServerMsg(msg) {
       if (G.explosions) G.explosions.push({ x: msg.x, y: msg.y, r: 10, maxR: msg.radius || 80, alpha: 1, fromRemote: true });
       break;
 
-    c//
-case 'you_hit':
+    case 'you_hit':
   // Add a check to ensure G.player is defined first
   if (G.player && !G.player.dead) { 
     const dmg = msg.damage || 20;
@@ -746,10 +750,10 @@ case 'you_hit':
           }
         });
         if(nukeEnabled&&G.player.nukeKills>=8&&!G.nukeReady){
-          G.nukeReady=true;
-          showNotif('☢️ NUKE READY! Press N to target!',3000);
-          SND.streak_ready();
-        }
+        G.nukeReady=true;
+        showNotif('☢️ NUKE READY — CLICK NUKE OR PRESS N',3000);
+        SND.streak_ready();
+      }
       }
       break;
 
@@ -772,9 +776,9 @@ case 'you_hit':
       break;
 
     case 'weapon_pickup':
-      // Remove pickup from world
+      // Remove pickup from world for ~15s
       if (msg.spawnIdx !== undefined && weaponSpawns[msg.spawnIdx])
-        weaponSpawns[msg.spawnIdx].timer = 15000;
+        weaponSpawns[msg.spawnIdx].timer = 15;
       break;
 
     case 'game_over':
@@ -884,9 +888,25 @@ function createNewRoom(){
   showScreen('sStreakSelect');
 }
 
-// Override confirmJoinReal to handle create_room too
+// Override confirmJoinReal to handle create_room and quick_join too
 const _origConfirmJoinReal = confirmJoinReal;
 window.confirmJoinReal = function(){
+  if(selectedServer && selectedServer.isReal && selectedServer.quickJoin){
+    wsSend({
+      type: 'quick_join',
+      playerInfo: { name: playerName, skin: playerSkin,
+        hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
+    });
+    showScreen('sLobby');
+    if(lobbyInterval){ clearInterval(lobbyInterval); lobbyInterval = null; }
+    const disp = document.getElementById('lobbyUsernameDisplay');
+    if(disp) disp.textContent = playerName;
+    document.getElementById('chatMsgs').innerHTML = '';
+    isReady = false;
+    document.getElementById('readyBtn').textContent = 'READY UP';
+    document.getElementById('readyBtn').style.borderColor = '';
+    return;
+  }
   if(selectedServer && selectedServer.isReal && selectedServer.creating){
     wsSend({
       type: 'create_room',
@@ -1480,7 +1500,7 @@ function killEntity(killer,victim){
     }
     if(nukeEnabled&&G.player.nukeKills>=8&&!G.nukeReady){
       G.nukeReady=true;
-      showNotif('☢️ NUKE READY! Press N to select target!',3000);
+      showNotif('☢️ NUKE READY — CLICK NUKE OR PRESS N',3000);
       SND.streak_ready();
     }
     // Streak progress
@@ -1561,7 +1581,7 @@ function findCoverNear(npc,awayFrom){
   let best=null,bestScore=-Infinity;
   obstacles.forEach(o=>{
     const ocx=o.x+o.w/2, ocy=o.y+o.h/2;
-    const dist=Math.hypot(npc.x-ocy,npc.y-ocy);
+    const dist=Math.hypot(npc.x-ocx,npc.y-ocy);
     if(dist>400)return;
     // Try spots around obstacle
     const candidates=[
@@ -1781,7 +1801,7 @@ function updatePlayer(dt){
   if(mdx&&mdy){mdx*=.707;mdy*=.707;}
 
   if(!p.sliding) moveWithCollision(p,mdx*speed*dt,mdy*speed*dt);
-  if(mdx||mdy) SND.footstep();
+  if((mdx||mdy)&&document.getElementById('tgFootstep')?.classList.contains('on')) SND.footstep();
 
   // ADS
   adsTarget=mouse.right||(keys['KeyQ'])?1:0;
@@ -2475,6 +2495,16 @@ function updateHUD(){
     document.getElementById('hudFPS').textContent=G.fps+'fps';
   } else document.getElementById('hudFPS').style.display='none';
 
+  // Ping display in online mode
+  const pingEl=document.getElementById('hudPing');
+  if(currentRoomId&&pingEl){
+    pingEl.style.display='block';
+    const pingColor=latency<60?'#4f4':latency<120?'#fa4':'#f44';
+    pingEl.innerHTML=`<span style="color:${pingColor}">${latency}ms</span> · 🌐 ONLINE`;
+    // Show offset when FPS is visible
+    pingEl.style.left=document.getElementById('tgFPS')?.classList.contains('on')?'210px':'170px';
+  } else if(pingEl){ pingEl.style.display='none'; }
+
   // Scoreboard
   if(keys['Tab']){
     document.getElementById('hudSB').classList.add('vis');
@@ -2556,7 +2586,7 @@ function gameLoop(ts){
       if(G.respawnTimer<=0){
         const sp=getSpawnPoint(G.npcs.filter(n=>!n.dead));
         G.player.x=sp.x;G.player.y=sp.y;G.player.hp=G.player.maxHp;G.player.armor=0;G.player.dead=false;G.player.flicker=0;
-        G.respawnTimer=5;
+        G.respawnTimer=5; // reset for next death
         document.getElementById('hudRespawn').classList.remove('vis');
       }
     }
@@ -2572,8 +2602,9 @@ function gameLoop(ts){
     // Damage numbers
     for(let i=G.dmgNums.length-1;i>=0;i--){ const d=G.dmgNums[i]; d.t-=dt;d.y+=d.vy*dt;d.vy*=.9; if(d.t<=0)G.dmgNums.splice(i,1); }
 
-    // Broadcast my player state to the server every 2 frames
-    if(currentRoomId && G.frameCount % 2 === 0 && G.player){
+    // Broadcast my player state to the server every ~2 frames (use separate counter)
+    G._wsBroadcastTick = (G._wsBroadcastTick||0)+1;
+    if(currentRoomId && G._wsBroadcastTick % 2 === 0 && G.player){
       wsSend({ type:'player_update',
         x:G.player.x, y:G.player.y, angle:G.player.angle,
         hp:G.player.hp, armor:G.player.armor, dead:G.player.dead,
@@ -2888,7 +2919,7 @@ function startGameFromLobby(){
     shakeX:0,shakeY:0,spawnPoints:[],
     uavActive:false,uavTimer:0,uavAngle:0,airstrikes:[],
     respawnTimer:5,nukeReady:false,
-    mines:[],smokeClouds:[],
+    mines:[],smokeClouds:[],_wsBroadcastTick:0,
   };
   generateMap();
   const psp=getSpawnPoint([]);
@@ -2899,14 +2930,17 @@ function startGameFromLobby(){
   // Use socketId as key in online mode so server score updates merge properly
   const myScoreKey = currentRoomId ? mySocketId : playerName;
   G.scores[myScoreKey]={k:0,d:0,score:0,name:playerName};
-  const npcCount=Math.max(lobbyPlayers.length,11);
-  for(let i=0;i<npcCount;i++){
-    const sp=getSpawnPoint([G.player,...G.npcs]);
-    const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
-    const npc=createNPC(sp.x,sp.y,team);
-    if(i<lobbyPlayers.length){npc.name=lobbyPlayers[i].name;npc.skin=lobbyPlayers[i].skin;}
-    G.npcs.push(npc);
-    G.scores[npc.name]={k:0,d:0,score:0};
+  // Only spawn NPC bots in offline/solo mode — online mode uses real remote players
+  if(!currentRoomId){
+    const npcCount=Math.max(lobbyPlayers.length,11);
+    for(let i=0;i<npcCount;i++){
+      const sp=getSpawnPoint([G.player,...G.npcs]);
+      const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
+      const npc=createNPC(sp.x,sp.y,team);
+      if(i<lobbyPlayers.length){npc.name=lobbyPlayers[i].name;npc.skin=lobbyPlayers[i].skin;}
+      G.npcs.push(npc);
+      G.scores[npc.name]={k:0,d:0,score:0};
+    }
   }
   if(gameMode==='tdm') G.player.team=0;
   ['hudRespawn','hudGO','hudSB'].forEach(id=>document.getElementById(id).classList.remove('vis'));
@@ -2974,8 +3008,14 @@ function refreshCustPreview(){
 function resetCustomization(){tempCust={body:0,hat:0,face:0,trail:0};buildSkins();}
 function equipAndClose(){custState={...tempCust};playerSkin=custState.body;showScreen('sMenu');}
 
-function startSoloPractice(){
-  lobbyPlayers=[];
+function quickJoinOnline(){
+  if(!wsConnected){ showNotif('⚠️ Connecting... try again in a moment'); wsConnect(); return; }
+  playerName=document.getElementById('menuUsername')?.value.trim()||playerName;
+  selectedServer={isReal:true,quickJoin:true};
+  showScreen('sStreakSelect');
+}
+
+function startSoloPractice(){  lobbyPlayers=[];
   for(let i=0;i<11;i++) lobbyPlayers.push({name:NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],skin:Math.floor(Math.random()*BODY_COLORS.length),ready:true,isNPC:true});
   gameMode='ffa'; G.mode='ffa'; G.scoreLimit=20;
   startGameFromLobby();
