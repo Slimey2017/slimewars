@@ -1,87 +1,85 @@
 'use strict';
 
-const express = require('express');
-const http = require('http');
+const express    = require('express');
+const http       = require('http');
 const { WebSocketServer, WebSocket } = require('ws');
 const { v4: uuidv4 } = require('uuid');
-const path = require('path');
+const path       = require('path');
 
-const app = express();
+const app    = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss    = new WebSocketServer({ server });
 
-const PORT = process.env.PORT || 3000;
-
-// ─── Serve static files (the game HTML) ───────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// ─── Server health check (Render.com needs this) ──────────────────
-app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
-
-// ─── In-memory state ──────────────────────────────────────────────
-// rooms: Map<roomId, Room>
-const rooms = new Map();
-// players: Map<ws, Player>
-const players = new Map();
-
+const PORT             = process.env.PORT || 3000;
 const MAX_ROOM_PLAYERS = 12;
-const TICK_RATE = 20; // ms — 50 Hz server tick
+const TICK_MS          = 50;   // 20 Hz world snapshots
 
-// ─── Room factory ─────────────────────────────────────────────────
+// ─── Static files ──────────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('/', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/health', (_req, res) =>
+  res.json({ ok: true, rooms: rooms.size, players: players.size }));
+
+// ─── In-memory state ───────────────────────────────────────────────
+const rooms   = new Map();   // roomId  → Room
+const players = new Map();   // ws      → Player
+
+// ─── Room factory ──────────────────────────────────────────────────
 function createRoom(name, mode) {
   const id = uuidv4().slice(0, 8).toUpperCase();
   const room = {
     id,
-    name: name || `SLIME-${id}`,
-    mode: mode || 'ffa',   // 'ffa' | 'tdm'
-    state: 'lobby',        // 'lobby' | 'ingame' | 'gameover'
-    players: new Map(),    // socketId -> playerState
-    scores: {},
+    name      : name || `SLIME-${id}`,
+    mode      : mode === 'tdm' ? 'tdm' : 'ffa',
+    state     : 'lobby',        // lobby | ingame | gameover
+    players   : new Map(),      // socketId → roomPlayer
+    scores    : {},
     scoreLimit: mode === 'tdm' ? 50 : 30,
     startTimer: null,
-    createdAt: Date.now(),
+    createdAt : Date.now(),
   };
   rooms.set(id, room);
   return room;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────
 function send(ws, msg) {
-  if (ws.readyState === WebSocket.OPEN) {
+  if (ws && ws.readyState === WebSocket.OPEN)
     ws.send(JSON.stringify(msg));
-  }
 }
 
 function broadcast(room, msg, exceptWs = null) {
-  room.players.forEach((_, socketId) => {
-    const ws = getWsBySocketId(socketId);
+  room.players.forEach((_, sid) => {
+    const ws = wsBySocketId(sid);
     if (ws && ws !== exceptWs) send(ws, msg);
   });
 }
 
-function getWsBySocketId(socketId) {
-  for (const [ws, p] of players.entries()) {
+function wsBySocketId(socketId) {
+  for (const [ws, p] of players) {
     if (p.socketId === socketId) return ws;
   }
   return null;
 }
 
+function getPlayerRoom(player) {
+  if (!player.roomId) return null;
+  return rooms.get(player.roomId) || null;
+}
+
 function getRoomList() {
   const list = [];
-  rooms.forEach(room => {
-    if (room.state !== 'gameover') {
+  rooms.forEach(r => {
+    if (r.state !== 'gameover') {
       list.push({
-        id: room.id,
-        name: room.name,
-        mode: room.mode,
-        players: room.players.size,
-        max: MAX_ROOM_PLAYERS,
-        state: room.state,
-        ping: Math.floor(Math.random() * 40) + 10, // approximate
+        id     : r.id,
+        name   : r.name,
+        mode   : r.mode,
+        players: r.players.size,
+        max    : MAX_ROOM_PLAYERS,
+        state  : r.state,
+        ping   : Math.floor(Math.random() * 40) + 5,
       });
     }
   });
@@ -90,65 +88,68 @@ function getRoomList() {
 
 function getLobbyPlayers(room) {
   const list = [];
-  room.players.forEach((p, sid) => {
-    list.push({
-      socketId: sid,
-      name: p.name,
-      skin: p.skin,
-      hat: p.hat,
-      face: p.face,
-      ready: p.ready,
-    });
-  });
+  room.players.forEach((p, sid) => list.push({
+    socketId: sid,
+    name    : p.name,
+    skin    : p.skin,
+    hat     : p.hat,
+    face    : p.face,
+    ready   : p.ready,
+    team    : p.team,
+  }));
   return list;
 }
 
-// Auto-create a default public room so there's always something to join
+function getOrInitScore(room, socketId, name) {
+  if (!room.scores[socketId])
+    room.scores[socketId] = { k: 0, d: 0, score: 0, name: name || '???' };
+  return room.scores[socketId];
+}
+
+function applyPlayerInfo(target, info) {
+  if (info.name  !== undefined) target.name  = String(info.name).slice(0, 24);
+  if (info.skin  !== undefined) target.skin  = info.skin;
+  if (info.hat   !== undefined) target.hat   = info.hat;
+  if (info.face  !== undefined) target.face  = info.face;
+}
+
+// ─── Default public rooms ──────────────────────────────────────────
 function ensurePublicRooms() {
-  let publicCount = 0;
-  rooms.forEach(r => { if (r.state === 'lobby') publicCount++; });
-  if (publicCount < 2) {
+  let lobbies = 0;
+  rooms.forEach(r => { if (r.state === 'lobby') lobbies++; });
+  if (lobbies < 2) {
     createRoom('SLIMEVILLE', 'ffa');
-    createRoom('GOO CANYON', 'tdm');
+    createRoom('GOO CANYON',  'tdm');
   }
 }
 ensurePublicRooms();
 
-// Clean up old empty gameover rooms every 60s
 setInterval(() => {
-  rooms.forEach((room, id) => {
-    if (room.players.size === 0 && room.state === 'gameover') {
-      rooms.delete(id);
-    }
+  rooms.forEach((r, id) => {
+    if (r.players.size === 0 && r.state === 'gameover') rooms.delete(id);
   });
   ensurePublicRooms();
 }, 60_000);
 
-// ─── WebSocket connection ──────────────────────────────────────────
-wss.on('connection', (ws, req) => {
+// ─── Connection ────────────────────────────────────────────────────
+wss.on('connection', ws => {
   const socketId = uuidv4();
   players.set(ws, {
     socketId,
-    roomId: null,
-    name: 'SlimeyPlayer',
-    skin: 0,
-    hat: '🚫',
-    face: '😐',
-    ready: false,
-    x: 2500, y: 2500,
-    angle: 0,
-    hp: 100,
-    armor: 0,
-    dead: false,
-    kills: 0,
-    deaths: 0,
-    team: 0,
-    slotIdx: 0,
-    inv: [],
-    pingTs: Date.now(),
+    roomId : null,
+    name   : 'SlimeyPlayer',
+    skin   : 0,
+    hat    : '🚫',
+    face   : '😐',
+    ready  : false,
+    team   : 0,
+    x: 2500, y: 2500, angle: 0,
+    hp: 100, armor: 0, dead: false,
+    kills: 0, deaths: 0,
+    slotIdx: 0, inv: [],
+    pingTs : Date.now(),
   });
 
-  // Welcome — send socket ID and current room list
   send(ws, { type: 'welcome', socketId, rooms: getRoomList() });
 
   ws.on('message', raw => {
@@ -156,17 +157,11 @@ wss.on('connection', (ws, req) => {
     try { msg = JSON.parse(raw); } catch { return; }
     handleMessage(ws, msg);
   });
-
-  ws.on('close', () => {
-    handleDisconnect(ws);
-  });
-
-  ws.on('error', () => {
-    handleDisconnect(ws);
-  });
+  ws.on('close', () => handleDisconnect(ws));
+  ws.on('error', () => handleDisconnect(ws));
 });
 
-// ─── Message router ───────────────────────────────────────────────
+// ─── Message router ────────────────────────────────────────────────
 function handleMessage(ws, msg) {
   const player = players.get(ws);
   if (!player) return;
@@ -188,13 +183,11 @@ function handleMessage(ws, msg) {
       joinRoom(ws, msg.roomId, msg.playerInfo);
       break;
 
+    // Client sends: { type:'quick_join', playerInfo:{...} }
     case 'quick_join': {
-      // Find a lobby room with space
       let target = null;
       for (const [, r] of rooms) {
-        if (r.state === 'lobby' && r.players.size < MAX_ROOM_PLAYERS) {
-          target = r; break;
-        }
+        if (r.state === 'lobby' && r.players.size < MAX_ROOM_PLAYERS) { target = r; break; }
       }
       if (!target) target = createRoom('SLIMEVILLE', 'ffa');
       joinRoom(ws, target.id, msg.playerInfo);
@@ -207,33 +200,29 @@ function handleMessage(ws, msg) {
 
     // ── Lobby ─────────────────────────────────────────────────────
     case 'update_player': {
-      // Player updated name/skin/hat/face
-      Object.assign(player, msg.info || {});
-      const room = player.roomId ? rooms.get(player.roomId) : null;
+      const info = msg.info || {};
+      applyPlayerInfo(player, info);
+      const room = getPlayerRoom(player);
       if (room) {
         const rp = room.players.get(player.socketId);
-        if (rp) Object.assign(rp, msg.info || {});
-        broadcast(room, {
-          type: 'lobby_players',
-          players: getLobbyPlayers(room),
-        });
+        if (rp) applyPlayerInfo(rp, info);
+        broadcast(room, { type: 'lobby_players', players: getLobbyPlayers(room) });
       }
       break;
     }
 
+    // Client sends: { type:'set_ready', ready:bool }
     case 'set_ready': {
       const room = getPlayerRoom(player);
-      if (!room) break;
+      if (!room || room.state !== 'lobby') break;
       const rp = room.players.get(player.socketId);
-      if (rp) rp.ready = msg.ready;
-      broadcast(room, {
-        type: 'lobby_players',
-        players: getLobbyPlayers(room),
-      });
+      if (rp) rp.ready = !!msg.ready;
+      broadcast(room, { type: 'lobby_players', players: getLobbyPlayers(room) });
       checkAutoStart(room);
       break;
     }
 
+    // Client sends: { type:'lobby_chat', text:str }
     case 'lobby_chat': {
       const room = getPlayerRoom(player);
       if (!room) break;
@@ -245,65 +234,60 @@ function handleMessage(ws, msg) {
       break;
     }
 
-    case 'set_mode': {
-      // Mode is locked at room creation — reject any attempt to change it
-      send(ws, { type: 'error', msg: 'Game mode is locked and cannot be changed after room creation.' });
+    case 'set_mode':
+      send(ws, { type: 'error', msg: 'Game mode is locked.' });
       break;
-    }
 
     case 'force_start': {
       const room = getPlayerRoom(player);
-      if (!room || room.state !== 'lobby') break;
-      startGame(room);
+      if (room && room.state === 'lobby') startGame(room);
       break;
     }
 
-    // ── In-game ───────────────────────────────────────────────────
+    // ── In-game: position relay ────────────────────────────────────
+    // Client sends every ~2 frames: { type:'player_update', x,y,angle,hp,armor,dead,slotIdx,inv }
     case 'player_update': {
-      // Client sends its own state every frame
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
       const rp = room.players.get(player.socketId);
       if (!rp) break;
-      // Update authoritative position (trust client for now — no cheating prevention needed for casual game)
-      Object.assign(rp, {
-        x: msg.x, y: msg.y,
-        angle: msg.angle,
-        hp: msg.hp,
-        armor: msg.armor,
-        dead: msg.dead,
-        slotIdx: msg.slotIdx,
-        inv: msg.inv,
-        skin: rp.skin, // don't overwrite from in-game
-      });
-      // Relay to everyone else (delta broadcast)
+
+      rp.x      = msg.x;
+      rp.y      = msg.y;
+      rp.angle  = msg.angle;
+      rp.hp     = msg.hp;
+      rp.armor  = msg.armor;
+      rp.dead   = msg.dead;
+      rp.slotIdx = msg.slotIdx;
+      rp.inv    = msg.inv;
+
+      // Relay with skin/hat/face/name so late-joiners render correctly
       broadcast(room, {
-        type: 'player_update',
+        type    : 'player_update',
         socketId: player.socketId,
-        x: msg.x, y: msg.y,
-        angle: msg.angle,
-        hp: msg.hp,
-        armor: msg.armor,
-        dead: msg.dead,
-        slotIdx: msg.slotIdx,
-        inv: msg.inv,
+        x: msg.x, y: msg.y, angle: msg.angle,
+        hp: msg.hp, armor: msg.armor, dead: msg.dead,
+        slotIdx: msg.slotIdx, inv: msg.inv,
+        skin: rp.skin, hat: rp.hat, face: rp.face,
+        team: rp.team, name: rp.name,
       }, ws);
       break;
     }
 
+    // ── In-game: bullet relay ─────────────────────────────────────
+    // Client sends: { type:'bullet_fired', x,y,vx,vy,dmg,range,r,expl,color,flame,laser }
     case 'bullet_fired': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
-      // Relay bullet — fields are top-level on msg (not nested under msg.bullet)
       broadcast(room, {
-        type: 'bullet_fired',
+        type    : 'bullet_fired',
         socketId: player.socketId,
-        x: msg.x, y: msg.y,
+        x: msg.x,   y: msg.y,
         vx: msg.vx, vy: msg.vy,
-        dmg: msg.dmg,
+        dmg  : msg.dmg,
         range: msg.range,
-        r: msg.r,
-        expl: msg.expl,
+        r    : msg.r,
+        expl : msg.expl,
         color: msg.color,
         flame: msg.flame,
         laser: msg.laser,
@@ -311,11 +295,12 @@ function handleMessage(ws, msg) {
       break;
     }
 
+    // ── In-game: explosion relay ──────────────────────────────────
     case 'explosion': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
       broadcast(room, {
-        type: 'explosion',
+        type    : 'explosion',
         socketId: player.socketId,
         x: msg.x, y: msg.y,
         radius: msg.radius,
@@ -324,51 +309,43 @@ function handleMessage(ws, msg) {
       break;
     }
 
-    case 'player_hit':   // legacy name — fall through
-    case 'hit_player': {
-      // Client reports hitting a real remote player
+    // ── In-game: hit a real remote player (bullet OR explosion) ───
+    // Client sends: { type:'hit_player', targetId, damage, weapon }
+    case 'hit_player':
+    case 'player_hit': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
+
       const targetRp = room.players.get(msg.targetId);
-      if (!targetRp || targetRp.dead) break; // already dead, ignore
+      if (!targetRp || targetRp.dead) break;
 
-      // Clamp damage to prevent abuse
-      const damage = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
-
-      // Apply damage server-side
+      const damage   = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
       const absorbed = targetRp.armor > 0
-        ? Math.min(targetRp.armor, Math.round(damage * 0.4))
-        : 0;
+        ? Math.min(targetRp.armor, Math.round(damage * 0.4)) : 0;
       targetRp.armor = Math.max(0, targetRp.armor - absorbed);
-      targetRp.hp   = Math.max(0, targetRp.hp - (damage - absorbed));
+      targetRp.hp    = Math.max(0, targetRp.hp   - (damage - absorbed));
 
-      const targetWs = getWsBySocketId(msg.targetId);
+      const targetWs = wsBySocketId(msg.targetId);
       if (targetWs) {
         send(targetWs, {
-          type: 'you_hit',
+          type      : 'you_hit',
           damage,
           attackerId: player.socketId,
-          weapon: msg.weapon,
+          weapon    : msg.weapon || '?',
         });
       }
 
       const killed = targetRp.hp <= 0 && !targetRp.dead;
-      // Send hitmarker back to the shooter
       send(ws, { type: 'hitmarker', kill: killed });
 
       if (killed) {
-        targetRp.dead = true; // mark now to prevent double-kill
+        targetRp.dead = true;
 
-        const killerScore = room.scores[player.socketId]
-          || (room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name });
-        killerScore.k++;
-        killerScore.score += 100;
-        killerScore.name = player.name; // keep name fresh
+        const ks = getOrInitScore(room, player.socketId, player.name);
+        ks.k++; ks.score += 100; ks.name = player.name;
 
-        const victimScore = room.scores[msg.targetId]
-          || (room.scores[msg.targetId] = { k: 0, d: 0, score: 0, name: targetRp.name });
-        victimScore.d++;
-        victimScore.name = targetRp.name;
+        const vs = getOrInitScore(room, msg.targetId, targetRp.name);
+        vs.d++; vs.name = targetRp.name;
 
         const killerRp = room.players.get(player.socketId);
         if (killerRp) killerRp.kills = (killerRp.kills || 0) + 1;
@@ -376,80 +353,88 @@ function handleMessage(ws, msg) {
 
         if (targetWs) {
           send(targetWs, {
-            type: 'you_died',
-            killerId: player.socketId,
+            type      : 'you_died',
+            killerId  : player.socketId,
             killerName: player.name,
-            weapon: msg.weapon,
+            weapon    : msg.weapon || '?',
           });
         }
 
-        broadcast(room, {
-          type: 'kill_event',
-          killerId: player.socketId,
-          killerName: player.name,
-          victimId: msg.targetId,
-          victimName: targetRp.name || '???',
-          weapon: msg.weapon,
-          scores: room.scores,
+        // Confirm kill to attacker → client ticks streaks + nuke counter
+        send(ws, {
+          type      : 'kill_confirmed',
+          victimName: targetRp.name,
+          weapon    : msg.weapon || '?',
         });
 
-        checkWinCondition(room);
+        broadcast(room, {
+          type      : 'kill_event',
+          killerId  : player.socketId,
+          killerName: player.name,
+          victimId  : msg.targetId,
+          victimName: targetRp.name,
+          weapon    : msg.weapon || '?',
+          scores    : room.scores,
+        });
+
+        checkWin(room);
       }
       break;
     }
 
+    // ── In-game: NPC kill (or self-death) reported by client ──────
+    // Client sends: { type:'player_killed', victimId, victimName, weapon }
+    // victimId is null for NPC kills; non-null for another real player
     case 'player_killed': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
 
-      // Update scores — store name so clients can resolve it
+      // Credit the kill to the sender
+      const ks = getOrInitScore(room, player.socketId, player.name);
+      ks.k++; ks.score += 100; ks.name = player.name;
       const killerRp = room.players.get(player.socketId);
-      if (killerRp) {
-        killerRp.kills = (killerRp.kills || 0) + 1;
-        if (!room.scores[player.socketId]) room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name };
-        room.scores[player.socketId].k++;
-        room.scores[player.socketId].score += 100;
-        room.scores[player.socketId].name = player.name;
-      }
+      if (killerRp) killerRp.kills = (killerRp.kills || 0) + 1;
 
-      const victimRp = room.players.get(msg.victimId);
-      if (victimRp) {
+      // If victim is a real room player (can happen via NPC proxy collision)
+      const victimRp = msg.victimId ? room.players.get(msg.victimId) : null;
+      if (victimRp && !victimRp.dead) {
+        victimRp.dead   = true;
         victimRp.deaths = (victimRp.deaths || 0) + 1;
-        if (!room.scores[msg.victimId]) room.scores[msg.victimId] = { k: 0, d: 0, score: 0, name: victimRp.name };
-        room.scores[msg.victimId].d++;
-        room.scores[msg.victimId].name = victimRp.name || msg.victimName;
+        const vs = getOrInitScore(room, msg.victimId, victimRp.name);
+        vs.d++; vs.name = victimRp.name;
+        const victimWs = wsBySocketId(msg.victimId);
+        if (victimWs) {
+          send(victimWs, {
+            type      : 'you_died',
+            killerId  : player.socketId,
+            killerName: player.name,
+            weapon    : msg.weapon || '?',
+          });
+        }
       }
 
-      // Notify victim to respawn
-      const victimWs = getWsBySocketId(msg.victimId);
-      if (victimWs) {
-        send(victimWs, {
-          type: 'you_died',
-          killerId: player.socketId,
-          killerName: player.name,
-          weapon: msg.weapon,
-        });
-      }
-
-      // Confirm kill back to attacker so client can update G.player.kills
-      send(ws, { type: 'kill_confirmed', victimName: msg.victimName, weapon: msg.weapon });
-
-      // Broadcast kill to room
-      broadcast(room, {
-        type: 'kill_event',
-        killerId: player.socketId,
-        killerName: player.name,
-        victimId: msg.victimId,
-        victimName: msg.victimName,
-        weapon: msg.weapon,
-        scores: room.scores,
+      // Confirm kill back → client ticks streaks
+      send(ws, {
+        type      : 'kill_confirmed',
+        victimName: msg.victimName || '???',
+        weapon    : msg.weapon || '?',
       });
 
-      // Check win condition
-      checkWinCondition(room);
+      broadcast(room, {
+        type      : 'kill_event',
+        killerId  : player.socketId,
+        killerName: player.name,
+        victimId  : msg.victimId || null,
+        victimName: msg.victimName || '???',
+        weapon    : msg.weapon || '?',
+        scores    : room.scores,
+      });
+
+      checkWin(room);
       break;
     }
 
+    // ── In-game: chat ─────────────────────────────────────────────
     case 'game_chat': {
       const room = getPlayerRoom(player);
       if (!room) break;
@@ -461,30 +446,35 @@ function handleMessage(ws, msg) {
       break;
     }
 
+    // ── In-game: scorestreak visual broadcast ─────────────────────
+    // Client sends: { type:'streak_used', streak, x, y }
     case 'streak_used': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
       broadcast(room, {
-        type: 'streak_used',
+        type    : 'streak_used',
         socketId: player.socketId,
-        streak: msg.streak,
-        x: msg.x, y: msg.y,
+        streak  : msg.streak,
+        x       : msg.x,
+        y       : msg.y,
       }, ws);
       break;
     }
 
+    // ── In-game: weapon pickup sync ───────────────────────────────
+    // Client sends: { type:'weapon_pickup', spawnIdx }
     case 'weapon_pickup': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
-      // Relay to everyone so spawns disappear for all
       broadcast(room, {
-        type: 'weapon_pickup',
+        type    : 'weapon_pickup',
         socketId: player.socketId,
         spawnIdx: msg.spawnIdx,
       }, ws);
       break;
     }
 
+    // ── Ping / pong ───────────────────────────────────────────────
     case 'ping':
       player.pingTs = Date.now();
       send(ws, { type: 'pong', ts: msg.ts });
@@ -495,86 +485,70 @@ function handleMessage(ws, msg) {
   }
 }
 
-// ─── Join / leave room ────────────────────────────────────────────
+// ─── Join / Leave ──────────────────────────────────────────────────
 function joinRoom(ws, roomId, info = {}) {
   const player = players.get(ws);
   if (!player) return;
-
-  // Leave current room first
   if (player.roomId) leaveRoom(ws);
 
   const room = rooms.get(roomId);
-  if (!room) {
-    send(ws, { type: 'error', msg: 'Room not found' });
-    return;
-  }
-  if (room.players.size >= MAX_ROOM_PLAYERS) {
-    send(ws, { type: 'error', msg: 'Room is full' });
-    return;
-  }
-  if (room.state === 'gameover') {
-    send(ws, { type: 'error', msg: 'Game already ended' });
-    return;
-  }
+  if (!room)                                 return send(ws, { type: 'error', msg: 'Room not found' });
+  if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
+  if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
 
-  // Apply player info
-  if (info.name) player.name = String(info.name).slice(0, 24);
-  if (info.skin !== undefined) player.skin = info.skin;
-  if (info.hat !== undefined) player.hat = info.hat;
-  if (info.face !== undefined) player.face = info.face;
-
+  applyPlayerInfo(player, info || {});
   player.roomId = roomId;
-  player.ready = false;
+  player.ready  = false;
+  player.kills  = 0;
+  player.deaths = 0;
+  player.hp     = 100;
+  player.armor  = 0;
+  player.dead   = false;
 
-  // Assign team in TDM
+  // TDM: auto-balance teams
   if (room.mode === 'tdm') {
-    const teams = { 0: 0, 1: 0 };
-    room.players.forEach(p => teams[p.team] = (teams[p.team] || 0) + 1);
-    player.team = teams[0] <= teams[1] ? 0 : 1;
+    const count = { 0: 0, 1: 0 };
+    room.players.forEach(p => { count[p.team] = (count[p.team] || 0) + 1; });
+    player.team = count[0] <= count[1] ? 0 : 1;
   }
 
-  room.players.set(player.socketId, {
+  const rp = {
     socketId: player.socketId,
-    name: player.name,
-    skin: player.skin,
-    hat: player.hat,
-    face: player.face,
-    ready: false,
-    kills: 0,
-    deaths: 0,
-    team: player.team,
-    x: 2500, y: 2500,
-    angle: 0,
-    hp: 100,
-    armor: 0,
-    dead: false,
-    slotIdx: 0,
-    inv: [],
-  });
-  room.scores[player.socketId] = { k: 0, d: 0, score: 0 };
+    name    : player.name,
+    skin    : player.skin,
+    hat     : player.hat,
+    face    : player.face,
+    ready   : false,
+    kills   : 0,
+    deaths  : 0,
+    team    : player.team,
+    x: 2500, y: 2500, angle: 0,
+    hp: 100, armor: 0, dead: false,
+    slotIdx: 0, inv: [],
+  };
+  room.players.set(player.socketId, rp);
+  room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name };
 
-  // Tell this client they joined
   send(ws, {
-    type: 'joined_room',
-    roomId: room.id,
+    type    : 'joined_room',
+    roomId  : room.id,
     roomName: room.name,
-    mode: room.mode,
-    state: room.state,
+    mode    : room.mode,
+    state   : room.state,
     socketId: player.socketId,
-    players: getLobbyPlayers(room),
-    scores: room.scores,
+    players : getLobbyPlayers(room),
+    scores  : room.scores,
   });
 
-  // Tell everyone else a player joined
   broadcast(room, {
-    type: 'player_joined',
-    player: { socketId: player.socketId, name: player.name, skin: player.skin, hat: player.hat, face: player.face },
+    type   : 'player_joined',
+    player : { socketId: player.socketId, name: player.name, skin: player.skin, hat: player.hat, face: player.face },
     players: getLobbyPlayers(room),
   }, ws);
 
-  // If game is already running, send them right in
+  // Mid-game join: send game_start so the client starts immediately
   if (room.state === 'ingame') {
-    send(ws, { type: 'game_start', mode: room.mode, scores: room.scores });
+    send(ws, { type: 'game_start', mode: room.mode, scoreLimit: room.scoreLimit, scores: room.scores });
   }
 }
 
@@ -589,15 +563,14 @@ function leaveRoom(ws) {
   delete room.scores[player.socketId];
 
   broadcast(room, {
-    type: 'player_left',
+    type    : 'player_left',
     socketId: player.socketId,
-    name: player.name,
-    players: getLobbyPlayers(room),
+    name    : player.name,
+    players : getLobbyPlayers(room),
   });
 
-  // If room empty, clean up timer
   if (room.players.size === 0 && room.startTimer) {
-    clearTimeout(room.startTimer);
+    clearInterval(room.startTimer);
     room.startTimer = null;
   }
 }
@@ -607,17 +580,16 @@ function handleDisconnect(ws) {
   players.delete(ws);
 }
 
-// ─── Game flow ────────────────────────────────────────────────────
+// ─── Game flow ─────────────────────────────────────────────────────
 function checkAutoStart(room) {
-  if (room.state !== 'lobby') return;
-  if (room.players.size < 2) return;
+  if (room.state !== 'lobby' || room.players.size < 2) return;
   let allReady = true;
   room.players.forEach(p => { if (!p.ready) allReady = false; });
   if (allReady) startCountdown(room);
 }
 
 function startCountdown(room) {
-  if (room.startTimer) return; // already counting
+  if (room.startTimer) return;
   let count = 5;
   broadcast(room, { type: 'start_countdown', seconds: count });
   room.startTimer = setInterval(() => {
@@ -634,23 +606,23 @@ function startCountdown(room) {
 
 function startGame(room) {
   if (room.state === 'ingame') return;
-  room.state = 'ingame';
-  // Reset scores
+  room.state  = 'ingame';
   room.scores = {};
-  room.players.forEach((_, sid) => { room.scores[sid] = { k: 0, d: 0, score: 0 }; });
-
+  room.players.forEach((p, sid) => {
+    p.kills = 0; p.deaths = 0; p.hp = 100; p.armor = 0; p.dead = false;
+    room.scores[sid] = { k: 0, d: 0, score: 0, name: p.name };
+  });
   broadcast(room, {
-    type: 'game_start',
-    mode: room.mode,
+    type      : 'game_start',
+    mode      : room.mode,
     scoreLimit: room.scoreLimit,
-    scores: room.scores,
-    players: getLobbyPlayers(room),
+    scores    : room.scores,
+    players   : getLobbyPlayers(room),
   });
 }
 
-function checkWinCondition(room) {
+function checkWin(room) {
   if (room.state !== 'ingame') return;
-
   if (room.mode === 'ffa') {
     let winner = null;
     Object.entries(room.scores).forEach(([sid, s]) => {
@@ -661,87 +633,63 @@ function checkWinCondition(room) {
       endGame(room, wp ? wp.name : 'Unknown', winner);
     }
   } else {
-    // TDM — sum kill counts per team
     const team = { 0: 0, 1: 0 };
     Object.entries(room.scores).forEach(([sid, s]) => {
       const p = room.players.get(sid);
       if (p) team[p.team] = (team[p.team] || 0) + s.k;
     });
-    if (team[0] >= room.scoreLimit) endGame(room, 'BLUE TEAM', null);
-    else if (team[1] >= room.scoreLimit) endGame(room, 'RED TEAM', null);
+    if      (team[0] >= room.scoreLimit) endGame(room, 'BLUE TEAM', null);
+    else if (team[1] >= room.scoreLimit) endGame(room, 'RED TEAM',  null);
   }
 }
 
 function endGame(room, winnerName, winnerSocketId) {
   room.state = 'gameover';
   broadcast(room, {
-    type: 'game_over',
+    type          : 'game_over',
     winnerName,
-    winnerSocketId,
-    scores: room.scores,
-    players: getLobbyPlayers(room),
+    winnerSocketId: winnerSocketId || null,
+    scores        : room.scores,
+    players       : getLobbyPlayers(room),
   });
 
-  // After 15s, reset room to lobby so same players can rematch
   setTimeout(() => {
     if (room.players.size === 0) {
       rooms.delete(room.id);
     } else {
-      room.state = 'lobby';
+      room.state  = 'lobby';
       room.scores = {};
       room.players.forEach((p, sid) => {
-        p.ready = false;
-        p.kills = 0;
-        p.deaths = 0;
-        room.scores[sid] = { k: 0, d: 0, score: 0 };
+        p.ready = false; p.kills = 0; p.deaths = 0;
+        p.hp = 100; p.armor = 0; p.dead = false;
+        room.scores[sid] = { k: 0, d: 0, score: 0, name: p.name };
       });
-      broadcast(room, {
-        type: 'rematch_lobby',
-        players: getLobbyPlayers(room),
-      });
+      broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room) });
     }
   }, 15_000);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────
-function getPlayerRoom(player) {
-  if (!player.roomId) return null;
-  return rooms.get(player.roomId) || null;
-}
-
-// ─── Server tick — broadcast full room snapshots ───────────────────
-// Only send snapshots for ingame rooms to avoid flooding lobby
+// ─── World snapshot tick (20 Hz) ──────────────────────────────────
 setInterval(() => {
   rooms.forEach(room => {
     if (room.state !== 'ingame') return;
     const snapshot = [];
-    room.players.forEach((p, sid) => {
-      snapshot.push({
-        socketId: sid,
-        name: p.name,
-        skin: p.skin,
-        hat: p.hat,
-        face: p.face,
-        x: p.x, y: p.y,
-        angle: p.angle,
-        hp: p.hp,
-        armor: p.armor,
-        dead: p.dead,
-        team: p.team,
-        kills: p.kills,
-      });
-    });
-    broadcast(room, {
-      type: 'world_snapshot',
-      players: snapshot,
-      scores: room.scores,
-    });
+    room.players.forEach((p, sid) => snapshot.push({
+      socketId: sid,
+      name    : p.name,
+      skin    : p.skin,
+      hat     : p.hat,
+      face    : p.face,
+      team    : p.team,
+      x: p.x,     y: p.y,    angle: p.angle,
+      hp: p.hp,   armor: p.armor, dead: p.dead,
+      kills: p.kills,
+    }));
+    broadcast(room, { type: 'world_snapshot', players: snapshot, scores: room.scores });
   });
-}, TICK_RATE);
+}, TICK_MS);
 
-// ─── Start ────────────────────────────────────────────────────────
+// ─── Start ─────────────────────────────────────────────────────────
 server.listen(PORT, () => {
-  console.log(`✅ Slime Wars server running on port ${PORT}`);
-  console.log(`   WebSocket: ws://localhost:${PORT}`);
-  console.log(`   HTTP:      http://localhost:${PORT}`);
+  console.log(`Slime Wars server on port ${PORT}`);
 });
