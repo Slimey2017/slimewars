@@ -190,8 +190,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #hudHitmarker.kill svg line{stroke:#f44;}
 
 /* Scorestreak HUD */
-#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;}
-.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;}
+#hudStreaks{bottom:80px;left:50%;transform:translateX(-50%);display:flex;gap:8px;pointer-events:auto;z-index:10;}
+.streak-hud{background:rgba(5,12,25,.85);border:1px solid #1e3050;padding:6px 10px;min-width:56px;text-align:center;cursor:pointer;transition:all .15s;border-radius:2px;pointer-events:auto;}
 .streak-hud.ready{border-color:var(--orange);box-shadow:0 0 12px rgba(249,115,22,.3);animation:streakPulse .8s infinite;}
 @keyframes streakPulse{0%,100%{box-shadow:0 0 8px rgba(249,115,22,.3);}50%{box-shadow:0 0 20px rgba(249,115,22,.6);}}
 .sh-icon{font-size:20px;}
@@ -1356,12 +1356,13 @@ function spawnBullet(owner,weapon,angle){
 }
 
 function getMeleeTargets(owner){
-  if(gameMode==='tdm') return (owner.isPlayer?G.npcs:[G.player,...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
-  return owner.isPlayer?G.npcs.filter(n=>!n.dead):[G.player,...G.npcs.filter(n=>n!==owner&&!n.dead)];
+  const player = G.player;
+  if(gameMode==='tdm') return (owner.isPlayer?G.npcs:[...(player?[player]:[]),...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
+  return owner.isPlayer?G.npcs.filter(n=>!n.dead):[...(player?[player]:[]),...G.npcs.filter(n=>n!==owner&&!n.dead)];
 }
 
 function dealDamage(attacker,victim,dmg){
-  if(victim.dead)return;
+  if(!victim||victim.dead)return;
   // Armor absorbs 40%
   if(victim.armor>0){
     const absorbed=Math.min(victim.armor,dmg*.4|0);
@@ -1415,7 +1416,7 @@ function killEntity(killer,victim){
   if(!G.scores[vn])G.scores[vn]={k:0,d:0,score:0};
   G.scores[kn].k++;G.scores[kn].score+=100;
   G.scores[vn].d++;
-  if(killer.isPlayer){
+  if(killer.isPlayer&&G.player){
     G.player.kills++;
     G.player.nukeKills=(G.player.nukeKills||0)+1;
     // Report kill to server in multiplayer
@@ -1444,7 +1445,7 @@ function killEntity(killer,victim){
     });
     SND.kill();
   }
-  if(victim.isPlayer) G.player.deaths++;
+  if(victim.isPlayer&&G.player) G.player.deaths++;
   addKillFeed(kn,vn);
   if(Math.random()<.2) addGChat(NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],GAME_CHAT_MSGS[Math.floor(Math.random()*GAME_CHAT_MSGS.length)]);
   checkWin();
@@ -1491,7 +1492,7 @@ function showGameOver(winnerName, scores){
 function getNearestEnemy(npc){
   let best=null,bestD=Infinity;
   let cands;
-  if(gameMode==='ffa') cands=[G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)];
+  if(gameMode==='ffa') cands=[...(G.player&&!G.player.dead?[G.player]:[]),...G.npcs.filter(n=>n!==npc&&!n.dead)];
   else {
     const others=G.npcs.filter(n=>n!==npc&&!n.dead&&n.team!==npc.team);
     cands=G.player&&!G.player.dead&&G.player.team!==npc.team?[G.player,...others]:others;
@@ -1548,7 +1549,7 @@ function updateNPC(npc,dt){
   if(npc.dead){
     npc.respawnTimer-=dt;
     if(npc.respawnTimer<=0){
-      const sp=getSpawnPoint([G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)]);
+      const sp=getSpawnPoint([...(G.player?[G.player]:[]),...G.npcs.filter(n=>n!==npc&&!n.dead)]);
       npc.x=sp.x;npc.y=sp.y;npc.hp=npc.maxHp;npc.armor=0;npc.dead=false;npc.flicker=0;
       npc.inv=[makeSlot(0),makeSlot(1+Math.floor(Math.random()*(WEAPONS_BASE.length-1))),null,null,null];
       npc.slotIdx=1; npc.aiState='patrol';
@@ -1816,7 +1817,7 @@ function switchWeapon(idx){
 }
 
 function activateStreak(idx){
-  if(!G.player.streakActive[idx])return;
+  if(!G.player||!G.player.streakActive[idx])return;
   const sid=selectedStreaks[idx];
   if(!sid)return;
   if(sid==='uav'){ G.uavActive=true; G.uavTimer=12; SND.uav(); showNotif('🛰️ UAV ONLINE'); }
@@ -1871,7 +1872,7 @@ function triggerNukeAt(wx,wy){
   // Reset streak
   const idx=selectedStreaks.indexOf('nuke');
   if(idx>=0){ G.player.streakActive[idx]=false; G.player.streakScores[idx]=0; }
-  G.nukeReady=false; G.player.nukeKills=0;
+  G.nukeReady=false; if(G.player) G.player.nukeKills=0;
 }
 
 function detonateNuke(){
@@ -1945,7 +1946,7 @@ function updateBullets(dt){
         }
       }
       // Player — hit by NPC bullets OR remote player bullets (fromRemote)
-      if(!hit&&!G.player.dead){
+      if(!hit&&G.player&&!G.player.dead){
         const ownerIsRemote = b.fromRemote;
         const ownerIsNPC = !b.owner.isPlayer && !b.fromRemote;
         if(ownerIsNPC || ownerIsRemote){
@@ -2546,7 +2547,9 @@ document.addEventListener('mousemove',e=>{
 document.addEventListener('mousedown',e=>{
   if(e.button===0){
     mouse.down=true;
-    if(document.getElementById('sGame').classList.contains('active')&&G.player&&!G.player.dead&&!G.gameOver){
+    // Don't shoot if clicking on a HUD interactive element
+    const hudClick = e.target.closest('#hudStreaks,#hudWeapons,#hudMute,#gchat,#hudNuke,#hudRespawn,#hudGO,#hudSB');
+    if(document.getElementById('sGame').classList.contains('active')&&G.player&&!G.player.dead&&!G.gameOver&&!hudClick){
       if(AC.state==='suspended')AC.resume();
       // Nuke targeting click
       if(nukeTargetMode&&nukeCountdown<0){
@@ -2834,7 +2837,7 @@ function startGameFromLobby(){
   G.scores[playerName]={k:0,d:0,score:0};
   const npcCount=Math.max(lobbyPlayers.length,11);
   for(let i=0;i<npcCount;i++){
-    const sp=getSpawnPoint([G.player,...G.npcs]);
+    const sp=getSpawnPoint([...(G.player?[G.player]:[]),...G.npcs]);
     const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
     const npc=createNPC(sp.x,sp.y,team);
     if(i<lobbyPlayers.length){npc.name=lobbyPlayers[i].name;npc.skin=lobbyPlayers[i].skin;}
