@@ -622,14 +622,16 @@ function joinRoom(ws, roomId, info = {}, password = '') {
   room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name };
 
   send(ws, {
-    type    : 'joined_room',
-    roomId  : room.id,
-    roomName: room.name,
-    mode    : room.mode,
-    state   : room.state,
-    socketId: player.socketId,
-    players : getLobbyPlayers(room),
-    scores  : room.scores,
+    type       : 'joined_room',
+    roomId     : room.id,
+    roomName   : room.name,
+    mode       : room.mode,
+    state      : room.state,
+    hasPassword: !!room.password,
+    locked     : !!room.locked,
+    socketId   : player.socketId,
+    players    : getLobbyPlayers(room),
+    scores     : room.scores,
   });
 
   broadcast(room, {
