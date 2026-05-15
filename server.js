@@ -26,14 +26,13 @@ const rooms   = new Map();   // roomId  → Room
 const players = new Map();   // ws      → Player
 
 // ─── Room factory ──────────────────────────────────────────────────
-function createRoom(name, mode, password = '') {
+function createRoom(name, mode) {
   const id = uuidv4().slice(0, 8).toUpperCase();
   const validMode = ['ffa','tdm','gungame'].includes(mode) ? mode : 'ffa';
   const room = {
     id,
     name      : name || `SLIME-${id}`,
     mode      : validMode,
-    password  : password || '',
     state     : 'lobby',        // lobby | ingame | gameover
     players   : new Map(),      // socketId → roomPlayer
     scores    : {},
@@ -84,7 +83,6 @@ function getRoomList() {
         max        : MAX_ROOM_PLAYERS,
         state      : r.state,
         locked     : !!r.locked,
-        hasPassword: !!r.password,
         ping       : Math.floor(Math.random() * 40) + 5,
       });
     }
@@ -181,21 +179,21 @@ function handleMessage(ws, msg) {
       break;
 
     case 'create_room': {
-      const room = createRoom(msg.name, msg.mode, msg.password || '');
+      const room = createRoom(msg.name, msg.mode);
       room.hostId = player.socketId;
       joinRoom(ws, room.id, msg.playerInfo);
       break;
     }
 
     case 'join_room':
-      joinRoom(ws, msg.roomId, msg.playerInfo, msg.password || '');
+      joinRoom(ws, msg.roomId, msg.playerInfo);
       break;
 
     // Client sends: { type:'quick_join', playerInfo:{...} }
     case 'quick_join': {
       let target = null;
       for (const [, r] of rooms) {
-        if (r.state === 'lobby' && r.players.size < MAX_ROOM_PLAYERS) { target = r; break; }
+        if (r.state === 'lobby' && !r.locked && r.players.size < MAX_ROOM_PLAYERS) { target = r; break; }
       }
       if (!target) target = createRoom('SLIMEVILLE', 'ffa');
       joinRoom(ws, target.id, msg.playerInfo);
@@ -572,7 +570,7 @@ function handleMessage(ws, msg) {
 }
 
 // ─── Join / Leave ──────────────────────────────────────────────────
-function joinRoom(ws, roomId, info = {}, password = '') {
+function joinRoom(ws, roomId, info = {}) {
   const player = players.get(ws);
   if (!player) return;
   if (player.roomId) leaveRoom(ws);
@@ -582,9 +580,6 @@ function joinRoom(ws, roomId, info = {}, password = '') {
   if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
   if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
   if (room.state === 'ingame' && room.locked) return send(ws, { type: 'error', msg: 'Room is locked — game in progress' });
-  if (room.password && room.password !== password)
-    return send(ws, { type: 'error', msg: 'Wrong password' });
-
   applyPlayerInfo(player, info || {});
   player.roomId = roomId;
   player.ready  = false;
@@ -627,7 +622,6 @@ function joinRoom(ws, roomId, info = {}, password = '') {
     roomName   : room.name,
     mode       : room.mode,
     state      : room.state,
-    hasPassword: !!room.password,
     locked     : !!room.locked,
     socketId   : player.socketId,
     players    : getLobbyPlayers(room),
