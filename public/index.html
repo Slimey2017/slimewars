@@ -981,6 +981,12 @@ function handleServerMsg(msg) {
       addLobbyMsg('SERVER', 'Rematch! Press READY UP to play again.');
       break;
 
+    case 'room_unlocked':
+      // All players left — server is now open and joinable again
+      populateServers();
+      showNotif('🔓 Server unlocked — all players left');
+      break;
+
     case 'pong':
       latency = Date.now() - msg.ts;
       break;
