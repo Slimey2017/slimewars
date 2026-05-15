@@ -125,6 +125,7 @@ function ensurePublicRooms() {
     createRoom('SLIMEVILLE', 'ffa');
     createRoom('GOO CANYON',  'tdm');
     createRoom('GUN GAME ARENA', 'gungame');
+    createRoom('FOREST ARENA', 'ffa');
   }
 }
 ensurePublicRooms();
@@ -486,6 +487,19 @@ function handleMessage(ws, msg) {
         streak  : msg.streak,
         x       : msg.x,
         y       : msg.y,
+      }, ws);
+      break;
+    }
+
+    // ── In-game: smoke grenade relay ─────────────────────────────
+    case 'smoke_cloud': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type: 'smoke_cloud',
+        socketId: player.socketId,
+        x: msg.x,
+        y: msg.y,
       }, ws);
       break;
     }
