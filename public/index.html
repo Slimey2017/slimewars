@@ -316,12 +316,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .hk-close{margin-top:14px;text-align:center;}
 
 /* ── Password modal ────────────────────────────────────── */
-#pwModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);align-items:center;justify-content:center;z-index:400;}
-#pwModal.vis{display:flex;}
-.pw-box{background:#111c2a;border:1px solid #1e3a5a;border-radius:6px;padding:28px 36px;min-width:320px;text-align:center;}
-.pw-title{font-family:'Orbitron';font-size:16px;color:var(--orange);letter-spacing:2px;margin-bottom:14px;}
-.pw-input{width:100%;padding:8px 12px;background:rgba(0,0,0,.6);border:1px solid #2a4060;border-bottom-color:var(--orange);color:#fff;font-family:'Share Tech Mono';font-size:14px;outline:none;margin-bottom:14px;text-align:center;letter-spacing:4px;}
-.pw-row{display:flex;gap:10px;justify-content:center;}
+
 
 /* ── Rematch vote ──────────────────────────────────────── */
 #rematchVote{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,12,25,.97);border:1px solid var(--blue);padding:28px 40px;text-align:center;z-index:150;min-width:300px;}
@@ -730,17 +725,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
 </div>
 
-<!-- Password modal -->
-<div id="pwModal">
-  <div class="pw-box">
-    <div class="pw-title">🔒 ROOM PASSWORD</div>
-    <input class="pw-input" id="pwInput" placeholder="ENTER PASSWORD" maxlength="20" onkeydown="if(event.key==='Enter')submitRoomPassword()">
-    <div class="pw-row">
-      <button class="btn" onclick="submitRoomPassword()">JOIN</button>
-      <button class="btn red" onclick="document.getElementById('pwModal').classList.remove('vis')">CANCEL</button>
-    </div>
-  </div>
-</div>
 
 <script>
 'use strict';
@@ -811,10 +795,6 @@ function handleServerMsg(msg) {
         `${msg.mode.toUpperCase()} · ${msg.players.length} players`;
       lockLobbyMode(msg.mode);
       renderRealLobbyPlayers(msg.players);
-      // Show password-protected notice using the server-authoritative flag
-      if (msg.hasPassword) {
-        addLobbyMsg('SERVER', '🔒 Password-protected room — access granted.');
-      }
       addLobbyMsg('SERVER', `Joined ${msg.roomName} · Mode: ${msg.mode.toUpperCase()}`);
       if (msg.state === 'ingame') startGameFromLobby();
       break;
@@ -1061,40 +1041,26 @@ function renderServerRows(rooms){
     const pc = ping < 60 ? 'p-good' : ping < 120 ? 'p-ok' : 'p-bad';
     const full = r.players >= r.max;
     const locked = !!r.locked;
-    const lock = r.hasPassword ? '🔒 ' : '';
     const cantJoin = full || locked;
-    const rowClick = cantJoin ? '' : `onclick="joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')"`;
+    const rowClick = cantJoin ? '' : `onclick="joinRealRoom('${r.id}')"`;
     const rowStyle = locked ? ' style="opacity:0.5;cursor:default;"' : '';
     const stateLabel = locked ? '🔴 IN GAME' : r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY';
     const btnLabel = full ? 'FULL' : locked ? 'LOCKED' : 'JOIN';
     return `<tr class="srv-row" ${rowClick}${rowStyle}>
-      <td><span class="srv-name">${lock}${r.name}</span></td>
+      <td><span class="srv-name">${r.name}</span></td>
       <td style="color:#5a8a6a;">${stateLabel}</td>
       <td><span class="tag ${modeClass[r.mode]||'tag-ffa'}">${modeLabel[r.mode]||r.mode.toUpperCase()}</span></td>
       <td>${r.players}/${r.max}</td>
       <td class="${pc}">${ping}ms</td>
-      <td><button class="btn sm" ${cantJoin ? 'disabled' : ''} onclick="event.stopPropagation();${cantJoin?'':'joinRealRoom(\''+r.id+'\',\''+( r.hasPassword?'1':'0')+'\')' }">${btnLabel}</button></td>
+      <td><button class="btn sm" ${cantJoin ? 'disabled' : ''} onclick="event.stopPropagation();${cantJoin ? '' : `joinRealRoom('${r.id}')`}">${btnLabel}</button></td>
     </tr>`;
   }).join('');
 }
 
-let _pendingJoinRoomId = null;
-function joinRealRoom(roomId, hasPassword) {
+function joinRealRoom(roomId) {
   if (!wsConnected) { showNotif('⚠️ Not connected to server'); return; }
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  _pendingJoinRoomId = roomId;
-  if (hasPassword === '1') {
-    document.getElementById('pwInput').value = '';
-    document.getElementById('pwModal').classList.add('vis');
-  } else {
-    selectedServer = { isReal: true, roomId };
-    showScreen('sStreakSelect');
-  }
-}
-function submitRoomPassword(){
-  const pw = document.getElementById('pwInput').value.trim();
-  document.getElementById('pwModal').classList.remove('vis');
-  selectedServer = { isReal: true, roomId: _pendingJoinRoomId, password: pw };
+  selectedServer = { isReal: true, roomId };
   showScreen('sStreakSelect');
 }
 
@@ -1103,7 +1069,6 @@ function confirmJoinReal() {
   wsSend({
     type: 'join_room',
     roomId: selectedServer.roomId,
-    password: selectedServer.password || '',
     playerInfo: { name: playerName, skin: playerSkin,
       hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
   });
@@ -1149,9 +1114,8 @@ function createNewRoom(){
   const modeChoice = prompt('Game mode:\n1 = Free For All\n2 = Team Deathmatch\n3 = Gun Game', '1');
   const modeMap = {'1':'ffa','2':'tdm','3':'gungame'};
   const mode = modeMap[modeChoice] || 'ffa';
-  const pw = prompt('Room password (leave blank for public):', '') || '';
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  selectedServer = { isReal: true, creating: true, name, mode, password: pw };
+  selectedServer = { isReal: true, creating: true, name, mode };
   showScreen('sStreakSelect');
 }
 
@@ -1179,7 +1143,6 @@ window.confirmJoinReal = function(){
       type: 'create_room',
       name: selectedServer.name,
       mode: selectedServer.mode,
-      password: selectedServer.password || '',
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
