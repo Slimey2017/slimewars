@@ -811,8 +811,8 @@ function handleServerMsg(msg) {
         `${msg.mode.toUpperCase()} · ${msg.players.length} players`;
       lockLobbyMode(msg.mode);
       renderRealLobbyPlayers(msg.players);
-      // Show password-protected notice in lobby chat (mirrors public game log behavior)
-      if (selectedServer && selectedServer.password) {
+      // Show password-protected notice using the server-authoritative flag
+      if (msg.hasPassword) {
         addLobbyMsg('SERVER', '🔒 Password-protected room — access granted.');
       }
       addLobbyMsg('SERVER', `Joined ${msg.roomName} · Mode: ${msg.mode.toUpperCase()}`);
@@ -1060,14 +1060,20 @@ function renderServerRows(rooms){
     const ping = r.ping || Math.floor(Math.random() * 40) + 5;
     const pc = ping < 60 ? 'p-good' : ping < 120 ? 'p-ok' : 'p-bad';
     const full = r.players >= r.max;
+    const locked = !!r.locked;
     const lock = r.hasPassword ? '🔒 ' : '';
-    return `<tr class="srv-row" onclick="joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')">
+    const cantJoin = full || locked;
+    const rowClick = cantJoin ? '' : `onclick="joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')"`;
+    const rowStyle = locked ? ' style="opacity:0.5;cursor:default;"' : '';
+    const stateLabel = locked ? '🔴 IN GAME' : r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY';
+    const btnLabel = full ? 'FULL' : locked ? 'LOCKED' : 'JOIN';
+    return `<tr class="srv-row" ${rowClick}${rowStyle}>
       <td><span class="srv-name">${lock}${r.name}</span></td>
-      <td style="color:#5a8a6a;">${r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY'}</td>
+      <td style="color:#5a8a6a;">${stateLabel}</td>
       <td><span class="tag ${modeClass[r.mode]||'tag-ffa'}">${modeLabel[r.mode]||r.mode.toUpperCase()}</span></td>
       <td>${r.players}/${r.max}</td>
       <td class="${pc}">${ping}ms</td>
-      <td><button class="btn sm" ${full ? 'disabled' : ''} onclick="event.stopPropagation();joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')">${full ? 'FULL' : 'JOIN'}</button></td>
+      <td><button class="btn sm" ${cantJoin ? 'disabled' : ''} onclick="event.stopPropagation();${cantJoin?'':'joinRealRoom(\''+r.id+'\',\''+( r.hasPassword?'1':'0')+'\')' }">${btnLabel}</button></td>
     </tr>`;
   }).join('');
 }
