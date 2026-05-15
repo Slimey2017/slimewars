@@ -26,18 +26,22 @@ const rooms   = new Map();   // roomId  → Room
 const players = new Map();   // ws      → Player
 
 // ─── Room factory ──────────────────────────────────────────────────
-function createRoom(name, mode) {
+function createRoom(name, mode, password = '') {
   const id = uuidv4().slice(0, 8).toUpperCase();
+  const validMode = ['ffa','tdm','gungame'].includes(mode) ? mode : 'ffa';
   const room = {
     id,
     name      : name || `SLIME-${id}`,
-    mode      : mode === 'tdm' ? 'tdm' : 'ffa',
+    mode      : validMode,
+    password  : password || '',
     state     : 'lobby',        // lobby | ingame | gameover
     players   : new Map(),      // socketId → roomPlayer
     scores    : {},
-    scoreLimit: mode === 'tdm' ? 50 : 30,
+    scoreLimit: validMode === 'tdm' ? 50 : validMode === 'gungame' ? 22 : 30,
     startTimer: null,
     createdAt : Date.now(),
+    rematchVotes: new Set(),    // socketIds that voted yes
+    hostId    : null,           // first player to join is host
   };
   rooms.set(id, room);
   return room;
@@ -73,13 +77,14 @@ function getRoomList() {
   rooms.forEach(r => {
     if (r.state !== 'gameover') {
       list.push({
-        id     : r.id,
-        name   : r.name,
-        mode   : r.mode,
-        players: r.players.size,
-        max    : MAX_ROOM_PLAYERS,
-        state  : r.state,
-        ping   : Math.floor(Math.random() * 40) + 5,
+        id         : r.id,
+        name       : r.name,
+        mode       : r.mode,
+        players    : r.players.size,
+        max        : MAX_ROOM_PLAYERS,
+        state      : r.state,
+        hasPassword: !!r.password,
+        ping       : Math.floor(Math.random() * 40) + 5,
       });
     }
   });
@@ -117,9 +122,10 @@ function applyPlayerInfo(target, info) {
 function ensurePublicRooms() {
   let lobbies = 0;
   rooms.forEach(r => { if (r.state === 'lobby') lobbies++; });
-  if (lobbies < 2) {
+  if (lobbies < 3) {
     createRoom('SLIMEVILLE', 'ffa');
     createRoom('GOO CANYON',  'tdm');
+    createRoom('GUN GAME ARENA', 'gungame');
   }
 }
 ensurePublicRooms();
@@ -174,13 +180,14 @@ function handleMessage(ws, msg) {
       break;
 
     case 'create_room': {
-      const room = createRoom(msg.name, msg.mode);
+      const room = createRoom(msg.name, msg.mode, msg.password || '');
+      room.hostId = player.socketId;
       joinRoom(ws, room.id, msg.playerInfo);
       break;
     }
 
     case 'join_room':
-      joinRoom(ws, msg.roomId, msg.playerInfo);
+      joinRoom(ws, msg.roomId, msg.playerInfo, msg.password || '');
       break;
 
     // Client sends: { type:'quick_join', playerInfo:{...} }
@@ -226,10 +233,33 @@ function handleMessage(ws, msg) {
     case 'lobby_chat': {
       const room = getPlayerRoom(player);
       if (!room) break;
+      const text = String(msg.text || '').slice(0, 120);
+      // Slash commands
+      if (text.startsWith('/kick ') && room.hostId === player.socketId) {
+        const targetName = text.slice(6).trim().toLowerCase();
+        let kicked = false;
+        room.players.forEach((rp, sid) => {
+          if (rp.name.toLowerCase() === targetName && sid !== player.socketId) {
+            const targetWs = wsBySocketId(sid);
+            if (targetWs) {
+              send(targetWs, { type: 'kick' });
+              leaveRoom(targetWs);
+              kicked = true;
+            }
+          }
+        });
+        if (kicked) {
+          broadcast(room, { type: 'lobby_chat', name: 'SERVER', text: `${targetName} was kicked.` });
+          broadcast(room, { type: 'lobby_players', players: getLobbyPlayers(room) });
+        } else {
+          send(ws, { type: 'lobby_chat', name: 'SERVER', text: `Player "${targetName}" not found.` });
+        }
+        break;
+      }
       broadcast(room, {
         type: 'lobby_chat',
         name: player.name,
-        text: String(msg.text || '').slice(0, 120),
+        text,
       });
       break;
     }
@@ -480,13 +510,68 @@ function handleMessage(ws, msg) {
       send(ws, { type: 'pong', ts: msg.ts });
       break;
 
+    // ── Rematch vote ──────────────────────────────────────────────
+    case 'rematch_vote': {
+      const room = getPlayerRoom(player);
+      if (!room) break;
+      if (msg.yes) room.rematchVotes.add(player.socketId);
+      else room.rematchVotes.delete(player.socketId);
+      const total = room.players.size;
+      const yes = room.rematchVotes.size;
+      broadcast(room, { type: 'rematch_vote_update', yes, total });
+      // Auto-start rematch if majority votes yes
+      if (yes >= Math.ceil(total / 2) && room.state === 'lobby') {
+        room.rematchVotes.clear();
+        setTimeout(() => startGame(room), 2000);
+      }
+      break;
+    }
+
+    // ── Kick player (host only) ───────────────────────────────────
+    case 'kick_player': {
+      const room = getPlayerRoom(player);
+      if (!room) break;
+      if (room.hostId !== player.socketId) {
+        send(ws, { type: 'error', msg: 'Only the host can kick players.' });
+        break;
+      }
+      const targetWs = wsBySocketId(msg.targetId);
+      if (targetWs) {
+        send(targetWs, { type: 'kick' });
+        const targetPlayer = players.get(targetWs);
+        if (targetPlayer) {
+          leaveRoom(targetWs);
+          broadcast(room, { type: 'lobby_players', players: getLobbyPlayers(room) });
+        }
+      }
+      break;
+    }
+
+    // ── Gun Game advance relay ────────────────────────────────────
+    case 'gungame_advance': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type    : 'gungame_advance',
+        socketId: player.socketId,
+        slot    : msg.slot,
+      }, ws);
+      // Check for gun game win (all weapons cycled)
+      const rp = room.players.get(player.socketId);
+      if (rp) rp.ggSlot = msg.slot;
+      if (msg.slot >= 22) { // GUN_GAME_ORDER.length
+        endGame(room, player.name, player.socketId);
+      }
+      break;
+    }
+
     default:
       break;
   }
 }
 
 // ─── Join / Leave ──────────────────────────────────────────────────
-function joinRoom(ws, roomId, info = {}) {
+function joinRoom(ws, roomId, info = {}, password = '') {
   const player = players.get(ws);
   if (!player) return;
   if (player.roomId) leaveRoom(ws);
@@ -495,6 +580,8 @@ function joinRoom(ws, roomId, info = {}) {
   if (!room)                                 return send(ws, { type: 'error', msg: 'Room not found' });
   if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
   if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
+  if (room.password && room.password !== password)
+    return send(ws, { type: 'error', msg: 'Wrong password' });
 
   applyPlayerInfo(player, info || {});
   player.roomId = roomId;
@@ -504,6 +591,9 @@ function joinRoom(ws, roomId, info = {}) {
   player.hp     = 100;
   player.armor  = 0;
   player.dead   = false;
+
+  // Set host if room is empty
+  if (room.players.size === 0) room.hostId = player.socketId;
 
   // TDM: auto-balance teams
   if (room.mode === 'tdm') {
@@ -659,11 +749,17 @@ function endGame(room, winnerName, winnerSocketId) {
     } else {
       room.state  = 'lobby';
       room.scores = {};
+      room.rematchVotes = new Set();
       room.players.forEach((p, sid) => {
         p.ready = false; p.kills = 0; p.deaths = 0;
         p.hp = 100; p.armor = 0; p.dead = false;
+        p.ggSlot = 0;
         room.scores[sid] = { k: 0, d: 0, score: 0, name: p.name };
       });
+      // Reassign host if original left
+      if (!room.players.has(room.hostId)) {
+        room.hostId = room.players.keys().next().value || null;
+      }
       broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room) });
     }
   }, 15_000);
