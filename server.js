@@ -650,6 +650,21 @@ function leaveRoom(ws) {
   room.players.delete(player.socketId);
   delete room.scores[player.socketId];
 
+  // ── Cancel countdown if one was running ───────────────────────
+  if (room.players.size === 0 && room.startTimer) {
+    clearInterval(room.startTimer);
+    room.startTimer = null;
+  }
+
+  // ── All players left ───────────────────────────────────────────
+  if (room.players.size === 0) {
+    // Delete non-public rooms immediately; public ones are recreated
+    // by ensurePublicRooms() on the next minute tick.
+    rooms.delete(room.id);
+    return;
+  }
+
+  // ── Some players remain — notify them who left ─────────────────
   broadcast(room, {
     type    : 'player_left',
     socketId: player.socketId,
@@ -657,9 +672,25 @@ function leaveRoom(ws) {
     players : getLobbyPlayers(room),
   });
 
-  if (room.players.size === 0 && room.startTimer) {
-    clearInterval(room.startTimer);
-    room.startTimer = null;
+  // ── If the room was locked (in-game) unlock it so others can join
+  if (room.locked && room.state === 'ingame') {
+    room.state  = 'lobby';
+    room.locked = false;
+    room.scores = {};
+    room.players.forEach((p, sid) => {
+      p.ready = false; p.kills = 0; p.deaths = 0;
+      p.hp = 100; p.armor = 0; p.dead = false;
+      room.scores[sid] = { k: 0, d: 0, score: 0, name: p.name };
+    });
+
+    // Reassign host if the host was the one who left
+    if (!room.players.has(room.hostId)) {
+      room.hostId = room.players.keys().next().value || null;
+    }
+
+    // Tell remaining clients the room is now open again
+    broadcast(room, { type: 'room_unlocked', roomId: room.id });
+    broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room) });
   }
 }
 
