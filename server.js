@@ -83,6 +83,7 @@ function getRoomList() {
         players    : r.players.size,
         max        : MAX_ROOM_PLAYERS,
         state      : r.state,
+        locked     : !!r.locked,
         hasPassword: !!r.password,
         ping       : Math.floor(Math.random() * 40) + 5,
       });
@@ -580,6 +581,7 @@ function joinRoom(ws, roomId, info = {}, password = '') {
   if (!room)                                 return send(ws, { type: 'error', msg: 'Room not found' });
   if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
   if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
+  if (room.state === 'ingame' && room.locked) return send(ws, { type: 'error', msg: 'Room is locked — game in progress' });
   if (room.password && room.password !== password)
     return send(ws, { type: 'error', msg: 'Wrong password' });
 
@@ -697,6 +699,7 @@ function startCountdown(room) {
 function startGame(room) {
   if (room.state === 'ingame') return;
   room.state  = 'ingame';
+  room.locked = true;   // lock to prevent late-joins
   room.scores = {};
   room.players.forEach((p, sid) => {
     p.kills = 0; p.deaths = 0; p.hp = 100; p.armor = 0; p.dead = false;
@@ -748,6 +751,7 @@ function endGame(room, winnerName, winnerSocketId) {
       rooms.delete(room.id);
     } else {
       room.state  = 'lobby';
+      room.locked = false;  // unlock for rematch
       room.scores = {};
       room.rematchVotes = new Set();
       room.players.forEach((p, sid) => {
