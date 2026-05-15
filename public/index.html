@@ -654,6 +654,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   <!-- Online status / ping -->
   <div id="hudPing" style="display:none;position:absolute;top:16px;left:170px;font-size:10px;color:#2a4a6a;letter-spacing:1px;"></div>
 
+  <!-- Tree hide status (forest map only) -->
+  <div id="hudTreeHide" style="display:none;position:absolute;bottom:165px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono';font-size:12px;letter-spacing:2px;background:rgba(0,0,0,.7);padding:4px 12px;border:1px solid #2a4a2a;border-radius:2px;pointer-events:none;"></div>
+
   <!-- Gun Game weapon progress -->
   <div class="hud" id="hudGunGame" style="display:none;">
     <div class="gg-weapon" id="ggWeaponName">PISTOL</div>
@@ -674,6 +677,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="hk-row"><span class="hk-key">1-5</span><span class="hk-desc">Weapons</span></div>
         <div class="hk-row"><span class="hk-key">F / G</span><span class="hk-desc">Scorestreaks</span></div>
         <div class="hk-row"><span class="hk-key">N</span><span class="hk-desc">Nuke (if ready)</span></div>
+        <div class="hk-row"><span class="hk-key">H</span><span class="hk-desc">Hide in tree (forest)</span></div>
         <div class="hk-row"><span class="hk-key">T</span><span class="hk-desc">Chat</span></div>
         <div class="hk-row"><span class="hk-key">TAB</span><span class="hk-desc">Scoreboard</span></div>
         <div class="hk-row"><span class="hk-key">ESC</span><span class="hk-desc">Main Menu</span></div>
@@ -967,6 +971,11 @@ function handleServerMsg(msg) {
       // Remove pickup from world for ~15s
       if (msg.spawnIdx !== undefined && weaponSpawns[msg.spawnIdx])
         weaponSpawns[msg.spawnIdx].timer = 15;
+      break;
+
+    case 'smoke_cloud':
+      // Another player threw a smoke grenade — spawn it in our world
+      if (G.smokeClouds) G.smokeClouds.push({x:msg.x, y:msg.y, r:0, maxR:120, t:8, alpha:0.7});
       break;
 
     case 'game_over':
@@ -1343,8 +1352,22 @@ let canvas,ctx,mmCtx,adsCtx;
 // ADS state
 let adsActive=false, adsFov=1.0, adsTarget=1.0;
 
+// ─── FOREST MAP STATE ──────────────────────────────────────────
+let forestTrees=[];       // {x,y,r,canopy} — visual + collision tree list
+let currentMapType='city'; // 'city' | 'forest'
+// Tree-hide mechanic
+let treeHideState={
+  active:false,        // currently hidden
+  timer:0,             // seconds remaining in current state
+  cooldown:0,          // cooldown remaining (10s after hide ends)
+  HIDE_DUR:10,
+  COOLDOWN_DUR:10,
+};
+let treeHideKeyDown=false; // debounce H key
+
 // ─── MAP GENERATION ────────────────────────────────────────────
 function generateMap(){
+  currentMapType='city';
   obstacles=[];weaponSpawns=[];mapBuildings=[];mapRoads=[];doors=[];sentries=[];trailParticles=[];
   const roadXs=[],roadYs=[];
   for(let x=GRID_OFFSET;x<MAP_SIZE-GRID_OFFSET;x+=CELL) roadXs.push(x);
@@ -1414,6 +1437,291 @@ function generateMap(){
 
 function circleRect(cx,cy,cr,rx,ry,rw,rh){ const nx=Math.max(rx,Math.min(cx,rx+rw)),ny=Math.max(ry,Math.min(cy,ry+rh)); return Math.hypot(cx-nx,cy-ny)<cr; }
 function pointInRect(px,py,rx,ry,rw,rh){ return px>=rx&&px<=rx+rw&&py>=ry&&py<=ry+rh; }
+
+// Returns true if entity e is hidden inside an active smoke cloud
+function isInSmoke(e){
+  if(!G.smokeClouds||!G.smokeClouds.length)return false;
+  return G.smokeClouds.some(s=>s.r>20&&Math.hypot(e.x-s.x,e.y-s.y)<s.r*.75);
+}
+
+// Returns true if entity e is inside a tree cluster (for hiding mechanic)
+function isInTree(e){
+  if(!forestTrees||!forestTrees.length)return false;
+  return forestTrees.some(t=>Math.hypot(e.x-t.x,e.y-t.y)<t.r*.7);
+}
+
+// ─── FOREST MAP GENERATION ─────────────────────────────────────
+// Path layout: a grid of wide dirt tracks (120px) with tree clusters
+// filling the blocks between them. No spawns inside trees.
+const FOREST_PATH_W = 130;  // clear dirt path width
+const FOREST_CELL   = 700;  // cell size (path + tree zone)
+const FOREST_OFFSET = 100;
+
+function generateForestMap(){
+  currentMapType='forest';
+  obstacles=[];weaponSpawns=[];mapBuildings=[];mapRoads=[];doors=[];sentries=[];trailParticles=[];
+  forestTrees=[];
+
+  // Build a grid of horizontal and vertical dirt paths
+  const pathXs=[], pathYs=[];
+  for(let x=FOREST_OFFSET; x<MAP_SIZE-FOREST_OFFSET-FOREST_PATH_W; x+=FOREST_CELL) pathXs.push(x);
+  for(let y=FOREST_OFFSET; y<MAP_SIZE-FOREST_OFFSET-FOREST_PATH_W; y+=FOREST_CELL) pathYs.push(y);
+
+  // Store paths as mapRoads so spawn logic and other systems reuse them
+  pathYs.forEach(py=>mapRoads.push({x:0,y:py,w:MAP_SIZE,h:FOREST_PATH_W,dir:'h'}));
+  pathXs.forEach(px=>mapRoads.push({x:px,y:0,w:FOREST_PATH_W,h:MAP_SIZE,dir:'v'}));
+
+  // Helper: is point on any path?
+  function onPath(px,py,pad=0){
+    return mapRoads.some(r=>
+      px>=r.x-pad&&px<=r.x+r.w+pad&&
+      py>=r.y-pad&&py<=r.y+r.h+pad
+    );
+  }
+
+  // Fill each block between paths with dense tree clusters
+  // Block corners are defined by consecutive path positions
+  const allX=[0,...pathXs.map(x=>x+FOREST_PATH_W),MAP_SIZE];
+  const allY=[0,...pathYs.map(y=>y+FOREST_PATH_W),MAP_SIZE];
+
+  for(let ci=0;ci<allX.length-1;ci++){
+    for(let cj=0;cj<allY.length-1;cj++){
+      const bx=allX[ci]+8, by=allY[cj]+8;
+      const bw=allX[ci+1]-allX[ci]-16, bh=allY[cj+1]-allY[cj]-16;
+      if(bw<60||bh<60)continue;
+
+      // Scatter trees randomly inside this block
+      const area=bw*bh;
+      const treeCount=Math.floor(area/3200)+Math.floor(Math.random()*4);
+      for(let t=0;t<treeCount;t++){
+        const tx=bx+18+Math.random()*(bw-36);
+        const ty=by+18+Math.random()*(bh-36);
+        const tr=18+Math.random()*14; // trunk collision radius
+        const canopy=tr+28+Math.random()*24; // visual canopy radius
+        // Don't plant trees too close to path edges
+        if(onPath(tx,ty,20))continue;
+        // Don't overlap other trees (collision radius)
+        if(forestTrees.some(ot=>Math.hypot(ot.x-tx,ot.y-ty)<ot.r+tr+4))continue;
+        forestTrees.push({x:tx,y:ty,r:tr,canopy,
+          hue:100+Math.floor(Math.random()*40),  // green hue variation
+          shade:Math.random()>.5});                // darker/lighter
+        // Tree trunk = solid obstacle
+        obstacles.push({x:tx-tr,y:ty-tr,w:tr*2,h:tr*2,isTree:true});
+      }
+
+      // Add a few rock boulders per block for cover on paths
+      for(let r=0;r<2;r++){
+        const rx=bx+bw*.2+Math.random()*bw*.6;
+        const ry=by+bh*.2+Math.random()*bh*.6;
+        if(onPath(rx,ry,0))continue;
+        if(forestTrees.some(t=>Math.hypot(t.x-rx,t.y-ry)<t.r+30))continue;
+        const rs=22+Math.random()*18;
+        obstacles.push({x:rx-rs,y:ry-rs,w:rs*2,h:rs*2,isRock:true,cx:rx,cy:ry,cr:rs});
+      }
+    }
+  }
+
+  // Weapon spawns — only on paths, never inside trees
+  for(let i=1;i<WEAPONS_BASE.length;i++){
+    let px,py,att=0;
+    do{
+      const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+      px=rd.x+20+Math.random()*(Math.max(1,rd.w-40));
+      py=rd.y+20+Math.random()*(Math.max(1,rd.h-40));
+      att++;
+    }while(att<40&&(obstacles.some(o=>circleRect(px,py,36,o.x,o.y,o.w,o.h))||!onPath(px,py,0)));
+    weaponSpawns.push({x:px,y:py,weaponId:i,timer:0});
+  }
+  for(let i=0;i<8;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({
+      x:rd.x+20+Math.random()*(Math.max(1,rd.w-40)),
+      y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),
+      weaponId:-1,timer:0
+    });
+  }
+
+  // Spawn points — paths only, away from trees and obstacles
+  G.spawnPoints=[];
+  mapRoads.forEach(r=>{
+    for(let i=0;i<5;i++){
+      const sx=r.x+24+Math.random()*(Math.max(1,r.w-48));
+      const sy=r.y+24+Math.random()*(Math.max(1,r.h-48));
+      if(obstacles.some(o=>circleRect(sx,sy,30,o.x,o.y,o.w,o.h)))continue;
+      G.spawnPoints.push({x:sx,y:sy});
+    }
+  });
+  if(!G.spawnPoints.length) G.spawnPoints.push({x:MAP_SIZE/2,y:MAP_SIZE/2});
+}
+
+// ─── FOREST DRAW FUNCTIONS ─────────────────────────────────────
+function drawForestBackground(){
+  // Base ground — dark forest floor
+  ctx.fillStyle='#1a2a18'; ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
+
+  // Path dirt
+  mapRoads.forEach(r=>{
+    ctx.fillStyle='#3a2e1e'; ctx.fillRect(r.x,r.y,r.w,r.h);
+    // Path texture — subtle stripes
+    ctx.strokeStyle='rgba(80,60,30,.15)'; ctx.lineWidth=4; ctx.setLineDash([18,14]);
+    if(r.dir==='h'){
+      const cy=r.y+r.h/2;
+      ctx.beginPath();ctx.moveTo(r.x,cy);ctx.lineTo(r.x+r.w,cy);ctx.stroke();
+    } else {
+      const cx=r.x+r.w/2;
+      ctx.beginPath();ctx.moveTo(cx,r.y);ctx.lineTo(cx,r.y+r.h);ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  });
+
+  // Forest floor patches
+  for(let i=0;i<180;i++){
+    const fx=(i*1237)%MAP_SIZE, fy=(i*983)%MAP_SIZE;
+    ctx.beginPath(); ctx.ellipse(fx,fy,15+i%12,8+i%8,i*.3,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${20+i%20},${35+i%20},${15+i%15},.5)`;
+    ctx.fill();
+  }
+
+  // Path intersections — slightly lighter square
+  const hR=mapRoads.filter(r=>r.dir==='h'), vR=mapRoads.filter(r=>r.dir==='v');
+  ctx.fillStyle='#2e2418';
+  hR.forEach(hr=>vR.forEach(vr=>ctx.fillRect(vr.x,hr.y,vr.w,hr.h)));
+
+  // Map border
+  ctx.strokeStyle='rgba(57,255,20,.06)'; ctx.lineWidth=4; ctx.strokeRect(0,0,MAP_SIZE,MAP_SIZE);
+}
+
+function drawForestTrees(){
+  // Draw tree canopies back-to-front (sorted by Y for depth)
+  const sorted=[...forestTrees].sort((a,b)=>a.y-b.y);
+  sorted.forEach(t=>{
+    // Shadow
+    ctx.beginPath(); ctx.ellipse(t.x+8,t.y+10,t.canopy*.7,t.canopy*.4,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fill();
+
+    // Outer canopy
+    const h=t.hue;
+    const cg=ctx.createRadialGradient(t.x-t.canopy*.2,t.y-t.canopy*.2,t.canopy*.1,t.x,t.y,t.canopy);
+    cg.addColorStop(0,`hsl(${h},55%,${t.shade?22:30}%)`);
+    cg.addColorStop(.6,`hsl(${h},50%,${t.shade?16:24}%)`);
+    cg.addColorStop(1,`hsl(${h+10},40%,10%)`);
+    ctx.beginPath(); ctx.arc(t.x,t.y,t.canopy,0,Math.PI*2);
+    ctx.fillStyle=cg; ctx.fill();
+
+    // Inner highlight cluster
+    for(let c=0;c<3;c++){
+      const ox=(c-1)*t.canopy*.3, oy=(c%2-.5)*t.canopy*.25;
+      ctx.beginPath(); ctx.arc(t.x+ox,t.y+oy,t.canopy*.25,0,Math.PI*2);
+      ctx.fillStyle=`hsla(${h+5},55%,${t.shade?24:34}%,.7)`; ctx.fill();
+    }
+
+    // Trunk
+    ctx.beginPath(); ctx.arc(t.x,t.y,t.r*.65,0,Math.PI*2);
+    ctx.fillStyle='#2a1a0a'; ctx.fill();
+    ctx.strokeStyle='#1a100a'; ctx.lineWidth=1.5; ctx.stroke();
+  });
+}
+
+function drawForestRocks(){
+  obstacles.filter(o=>o.isRock).forEach(o=>{
+    const cx=o.cx||o.x+o.w/2, cy=o.cy||o.y+o.h/2, cr=o.cr||o.w/2;
+    ctx.beginPath(); ctx.ellipse(cx+3,cy+4,cr*.85,cr*.6,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,.3)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,cr,0,Math.PI*2);
+    const rg=ctx.createRadialGradient(cx-cr*.3,cy-cr*.3,cr*.1,cx,cy,cr);
+    rg.addColorStop(0,'#5a5a5a'); rg.addColorStop(1,'#2a2a2a');
+    ctx.fillStyle=rg; ctx.fill();
+    ctx.strokeStyle='#1a1a1a'; ctx.lineWidth=1.5; ctx.stroke();
+    // Highlight
+    ctx.beginPath(); ctx.arc(cx-cr*.3,cy-cr*.3,cr*.2,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fill();
+  });
+}
+
+// ─── TREE HIDE MECHANIC ────────────────────────────────────────
+function updateTreeHide(dt){
+  if(currentMapType!=='forest')return;
+  const p=G.player; if(!p||p.dead)return;
+  const st=treeHideState;
+
+  // Cooldown ticks down passively
+  if(st.cooldown>0) st.cooldown=Math.max(0,st.cooldown-dt);
+
+  if(st.active){
+    st.timer=Math.max(0,st.timer-dt);
+    if(st.timer<=0){
+      // Hide expired
+      st.active=false;
+      st.cooldown=st.COOLDOWN_DUR;
+      p._hiding=false;
+      showNotif('🌿 REVEALED — cooldown 10s');
+    }
+  }
+
+  // H key to toggle hide (only inside a tree)
+  const hPressed=keys['KeyH'];
+  if(hPressed&&!treeHideKeyDown){
+    treeHideKeyDown=true;
+    if(!st.active&&st.cooldown<=0){
+      if(isInTree(p)){
+        st.active=true;
+        st.timer=st.HIDE_DUR;
+        p._hiding=true;
+        showNotif('🌿 HIDDEN IN TREES — 10s');
+      } else {
+        showNotif('🌿 Must be inside a tree to hide');
+      }
+    } else if(st.active){
+      // Cancel early
+      st.active=false;
+      st.cooldown=st.COOLDOWN_DUR;
+      p._hiding=false;
+      showNotif('🌿 REVEALED');
+    }
+  }
+  if(!hPressed) treeHideKeyDown=false;
+
+  // If player walks out of tree while hiding, cancel
+  if(st.active&&!isInTree(p)){
+    st.active=false;
+    st.cooldown=st.COOLDOWN_DUR;
+    p._hiding=false;
+    showNotif('🌿 REVEALED — left tree');
+  }
+}
+
+// Draw tree-hide HUD indicator
+function drawTreeHideHUD(){
+  if(currentMapType!=='forest')return;
+  const st=treeHideState;
+  const p=G.player; if(!p)return;
+  const inTree=isInTree(p);
+  const el=document.getElementById('hudTreeHide');
+  if(!el)return;
+
+  let txt='', col='#4a7a4a';
+  if(st.active){
+    txt=`🌿 HIDDEN ${Math.ceil(st.timer)}s`;
+    col='#39ff14';
+  } else if(st.cooldown>0){
+    txt=`🌿 COOLDOWN ${Math.ceil(st.cooldown)}s`;
+    col='#888';
+  } else if(inTree){
+    txt='🌿 [H] HIDE';
+    col='#8df08d';
+  } else {
+    txt=''; // not near tree
+  }
+  el.textContent=txt;
+  el.style.color=col;
+  el.style.display=txt?'block':'none';
+}
+
+// Make NPC AI unable to target hiding players
+function isHiddenFromNPC(entity){
+  if(!entity.isPlayer)return false;
+  return entity._hiding===true;
+}
 
 // ─── CANVAS SETUP ─────────────────────────────────────────────
 function setupCanvas(){
@@ -1614,6 +1922,10 @@ function spawnBullet(owner,weapon,angle){
     const tx=owner.x+Math.cos(angle)*200, ty=owner.y+Math.sin(angle)*200;
     G.smokeClouds.push({x:tx,y:ty,r:0,maxR:120,t:8,alpha:0.7});
     SND.pistol();
+    // Broadcast smoke position to other players in multiplayer
+    if(owner.isPlayer && currentRoomId){
+      wsSend({type:'smoke_cloud', x:tx, y:ty});
+    }
     return;
   }
   // Shockwave — radial AoE
@@ -1803,6 +2115,8 @@ function getNearestEnemy(npc){
   }
   cands.forEach(e=>{
     if(!e||e.dead)return;
+    if(isInSmoke(e))return; // smoke obscures target from NPC
+    if(isHiddenFromNPC(e))return; // tree-hide mechanic
     const d=Math.hypot(e.x-npc.x,e.y-npc.y);
     if(d<bestD){bestD=d;best=e;}
   });
@@ -1838,6 +2152,19 @@ function moveWithCollision(entity,dx,dy){
     let nx=entity.x+sx,ny=entity.y+sy;
     let cX=false,cY=false;
     obstacles.forEach(o=>{
+      // Trees use circular collision (trunk), rocks also circular
+      if(o.isTree){
+        const tcx=o.x+o.w/2, tcy=o.y+o.h/2, tr=o.w/2;
+        if(Math.hypot(nx-tcx,entity.y-tcy)<tr+entity.r) cX=true;
+        if(Math.hypot(entity.x-tcx,ny-tcy)<tr+entity.r) cY=true;
+        return;
+      }
+      if(o.isRock){
+        const rcx=o.cx||o.x+o.w/2, rcy=o.cy||o.y+o.h/2, rr=(o.cr||o.w/2)*.85;
+        if(Math.hypot(nx-rcx,entity.y-rcy)<rr+entity.r) cX=true;
+        if(Math.hypot(entity.x-rcx,ny-rcy)<rr+entity.r) cY=true;
+        return;
+      }
       if(circleRect(nx,entity.y,entity.r,o.x,o.y,o.w,o.h))cX=true;
       if(circleRect(entity.x,ny,entity.r,o.x,o.y,o.w,o.h))cY=true;
     });
@@ -2299,7 +2626,7 @@ function updateBullets(dt){
     ents.forEach(e=>{
       if(triggered||!e||e.dead||e===m.owner)return;
       if(gameMode==='tdm'&&e.team===m.owner.team)return;
-      if(Math.hypot(e.x-m.x,e.y-m.y)<28){ explode(m.x,m.y,m.expl||80,m.dmg,m.owner); triggered=true; }
+      if(Math.hypot(e.x-m.x,e.y-m.y)<28+(e.r||18)){ explode(m.x,m.y,m.expl||80,m.dmg,m.owner); triggered=true; }
     });
     if(triggered) G.mines.splice(i,1);
   }
@@ -2344,6 +2671,7 @@ function render(){
   drawBackground();
   drawPickups();
   drawObstacles();
+  if(currentMapType==='forest'){ drawForestRocks(); }
   drawMines();
   drawSmokeClouds();
   drawSentries();
@@ -2379,8 +2707,17 @@ function render(){
       ctx.restore();
     });
   }
-  if(G.player&&!G.player.dead) drawEntity(G.player);
+  if(G.player&&!G.player.dead){
+    // When hiding in a tree, render the local player at reduced opacity
+    if(G.player._hiding){ ctx.save(); ctx.globalAlpha=0.35; }
+    drawEntity(G.player);
+    if(G.player._hiding){ ctx.restore(); }
+  }
+  // Forest trees render OVER all entities (players walk under canopy)
+  if(currentMapType==='forest') drawForestTrees();
+  drawUAVRemotePings();
   drawDmgNums();
+  drawTreeHideHUD();
   ctx.restore();
 
   // ADS scope overlay
@@ -2442,6 +2779,7 @@ function render(){
 }
 
 function drawBackground(){
+  if(currentMapType==='forest'){ drawForestBackground(); return; }
   ctx.fillStyle='#1a1e22'; ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
   mapBuildings.forEach(b=>{
     ctx.fillStyle=b.tone||'#1e3a4a'; ctx.fillRect(b.x,b.y,b.w,b.h);
@@ -2471,6 +2809,17 @@ function drawBackground(){
 }
 
 function drawObstacles(){
+  if(currentMapType==='forest'){
+    // Rocks are drawn in drawForestRocks; tree trunks are inside drawForestTrees
+    // Only draw any non-tree, non-rock obstacles (e.g. future additions)
+    obstacles.forEach(o=>{
+      if(o.isTree||o.isRock)return;
+      ctx.fillStyle='#0e1418'; ctx.fillRect(o.x,o.y,o.w,o.h);
+      ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(o.x,o.y,o.w,2); ctx.fillRect(o.x,o.y,2,o.h);
+      ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(o.x,o.y+o.h-2,o.w,2); ctx.fillRect(o.x+o.w-2,o.y,2,o.h);
+    });
+    return;
+  }
   obstacles.forEach(o=>{
     ctx.fillStyle='#0e1418'; ctx.fillRect(o.x,o.y,o.w,o.h);
     ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(o.x,o.y,o.w,2); ctx.fillRect(o.x,o.y,2,o.h);
@@ -2656,12 +3005,23 @@ function drawEntity(e){
   ctx.font="bold 11px 'Share Tech Mono'"; ctx.textAlign='center';
   ctx.fillText((e.isPlayer?'[YOU] ':'')+displayName,e.x,by-4);
   ctx.textAlign='left';
-  // UAV ping indicator
+  // UAV ping indicator on NPCs
   if(G.uavActive&&!e.isPlayer){
     const ping=(Math.sin(G.gameTime*4)*.5+.5);
     ctx.beginPath(); ctx.arc(e.x,e.y,e.r+6+ping*8,0,Math.PI*2);
     ctx.strokeStyle=`rgba(255,100,100,${0.4+ping*.4})`; ctx.lineWidth=2; ctx.stroke();
   }
+}
+
+// ─── UAV REMOTE PLAYER PINGS (drawn after all entities) ────────
+function drawUAVRemotePings(){
+  if(!G.uavActive||!currentRoomId)return;
+  Object.values(remotePlayers).forEach(rp=>{
+    if(!rp||rp.dead||!rp.x)return;
+    const ping=(Math.sin(G.gameTime*4)*.5+.5);
+    ctx.beginPath(); ctx.arc(rp.x,rp.y,18+6+ping*8,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(255,80,80,${0.5+ping*.4})`; ctx.lineWidth=2; ctx.stroke();
+  });
 }
 
 function drawDmgNums(){
@@ -2811,25 +3171,56 @@ function drawMinimap(){
   if(!document.getElementById('tgMM')?.classList.contains('on'))return;
   const mc=document.getElementById('mmCanvas');
   const mctx=mmCtx,MW=mc.width,MH=mc.height,scale=MW/MAP_SIZE;
-  mctx.fillStyle='#1d2228'; mctx.fillRect(0,0,MW,MH);
-  mapBuildings.forEach(b=>{ mctx.fillStyle='#1e3a4a'; mctx.fillRect(b.x*scale,b.y*scale,b.w*scale,b.h*scale); });
-  mctx.fillStyle='#0e1418';
-  obstacles.forEach(o=>mctx.fillRect(o.x*scale,o.y*scale,Math.max(1,o.w*scale),Math.max(1,o.h*scale)));
+
+  if(currentMapType==='forest'){
+    // Forest minimap: dark green base, lighter paths
+    mctx.fillStyle='#1a2a18'; mctx.fillRect(0,0,MW,MH);
+    mapRoads.forEach(r=>{ mctx.fillStyle='#3a2e1e'; mctx.fillRect(r.x*scale,r.y*scale,r.w*scale,r.h*scale); });
+    forestTrees.forEach(t=>{
+      mctx.beginPath(); mctx.arc(t.x*scale,t.y*scale,Math.max(1,t.canopy*scale),0,Math.PI*2);
+      mctx.fillStyle='#1e3a1a'; mctx.fill();
+    });
+  } else {
+    mctx.fillStyle='#1d2228'; mctx.fillRect(0,0,MW,MH);
+    mapBuildings.forEach(b=>{ mctx.fillStyle='#1e3a4a'; mctx.fillRect(b.x*scale,b.y*scale,b.w*scale,b.h*scale); });
+    mctx.fillStyle='#0e1418';
+    obstacles.forEach(o=>mctx.fillRect(o.x*scale,o.y*scale,Math.max(1,o.w*scale),Math.max(1,o.h*scale)));
+  }
   G.npcs.forEach(n=>{
     if(n.dead)return;
-    const visible=G.uavActive||gameMode==='tdm'&&n.team===G.player.team;
-    if(!visible&&!G.uavActive)return;
+    const visible=G.uavActive||(gameMode==='tdm'&&n.team===G.player.team);
+    if(!visible)return;
     mctx.beginPath(); mctx.arc(n.x*scale,n.y*scale,2.5,0,Math.PI*2);
     mctx.fillStyle=gameMode==='tdm'?(n.team===0?'#3af':'#f44'):(BODY_COLORS[n.skin]?.color||'#f44');
     mctx.fill();
   });
-  // UAV sweep line
+  // UAV also reveals real remote players in multiplayer
+  if(G.uavActive && currentRoomId){
+    Object.values(remotePlayers).forEach(rp=>{
+      if(!rp||rp.dead||!rp.x)return;
+      mctx.beginPath(); mctx.arc(rp.x*scale,rp.y*scale,3,0,Math.PI*2);
+      mctx.fillStyle=gameMode==='tdm'?(rp.team===0?'#3af':'#f44'):'#f44';
+      mctx.fill();
+      // Pulsing ring to distinguish from dots
+      const ping=(Math.sin(G.gameTime*5)*.5+.5);
+      mctx.beginPath(); mctx.arc(rp.x*scale,rp.y*scale,4+ping*2,0,Math.PI*2);
+      mctx.strokeStyle=`rgba(255,100,100,${0.4+ping*.5})`; mctx.lineWidth=1; mctx.stroke();
+    });
+  }
+  // UAV sweep line — rotates from map center of player view
   if(G.uavActive){
     const cx=G.player.x*scale, cy=G.player.y*scale;
     const sweep=G.uavAngle;
-    mctx.strokeStyle='rgba(57,255,20,.4)'; mctx.lineWidth=1;
+    // Draw a filled arc wedge for the sweep effect
+    mctx.save();
+    mctx.strokeStyle='rgba(57,255,20,.5)'; mctx.lineWidth=1.5;
     mctx.beginPath(); mctx.moveTo(cx,cy);
     mctx.lineTo(cx+Math.cos(sweep)*MW,cy+Math.sin(sweep)*MW); mctx.stroke();
+    // Fading tail
+    mctx.strokeStyle='rgba(57,255,20,.15)'; mctx.lineWidth=6;
+    mctx.beginPath(); mctx.moveTo(cx,cy);
+    mctx.lineTo(cx+Math.cos(sweep-.3)*MW,cy+Math.sin(sweep-.3)*MW); mctx.stroke();
+    mctx.restore();
   }
   sentries.forEach(s=>{ if(s.dead)return; mctx.beginPath();mctx.arc(s.x*scale,s.y*scale,3,0,Math.PI*2);mctx.fillStyle='#6a9';mctx.fill(); });
   if(G.player&&!G.player.dead){
@@ -2855,8 +3246,7 @@ function gameLoop(ts){
     G.frameCount++; G.fpsTimer+=dt;
     if(G.fpsTimer>=.5){G.fps=Math.round(G.frameCount/G.fpsTimer);G.frameCount=0;G.fpsTimer=0;}
     if(!G.player.dead) updatePlayer(dt);
-    else{
-      G.respawnTimer=Math.max(0,(G.respawnTimer||0)-dt);
+    else{      G.respawnTimer=Math.max(0,(G.respawnTimer||0)-dt);
       document.getElementById('rsTimer').textContent=Math.ceil(G.respawnTimer);
       if(G.respawnTimer<=0){
         const sp=getSpawnPoint(G.npcs.filter(n=>!n.dead));
@@ -2865,6 +3255,7 @@ function gameLoop(ts){
         document.getElementById('hudRespawn').classList.remove('vis');
       }
     }
+    updateTreeHide(dt);
     // Only run NPC AI in offline/solo mode
     if(!currentRoomId){
       G.npcs.forEach(n=>updateNPC(n,dt));
@@ -3201,7 +3592,17 @@ function startGameFromLobby(){
     respawnTimer:5,nukeReady:false,
     mines:[],smokeClouds:[],_wsBroadcastTick:0,
   };
-  generateMap();
+  // Reset tree hide state for new game
+  treeHideState.active=false; treeHideState.timer=0; treeHideState.cooldown=0;
+  treeHideKeyDown=false;
+  if(G.player) G.player._hiding=false;
+  forestTrees=[];
+
+  // Choose map type from server name or randomly
+  const srvName=(selectedServer?.name||'').toUpperCase();
+  const useForest=srvName.includes('FOREST')||srvName.includes('WOOD')||srvName.includes('JUNGLE');
+  if(useForest) generateForestMap();
+  else generateMap();
   const psp=getSpawnPoint([]);
   G.player=createPlayer(psp.x,psp.y);
   G.player.name=playerName; G.player.skin=playerSkin;
