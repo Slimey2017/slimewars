@@ -1788,21 +1788,7 @@ function endGame(winner){
   document.getElementById('goScores').innerHTML=sorted.map((e,i)=>`<div style="display:flex;gap:20px;padding:3px 0;"><span style="color:#3a6a8a;width:24px;">#${i+1}</span><span style="flex:1">${e[0]}</span><span style="color:var(--orange);">${e[1].k}K</span><span style="color:var(--red);">${e[1].d}D</span></div>`).join('');
 }
 
-function showGameOver(winnerName, scores){
-  G.gameOver=true;
-  document.getElementById('hudGO').classList.add('vis');
-  const isWinner = winnerName===playerName || winnerName==='BLUE TEAM'&&G.player?.team===0 || winnerName==='RED TEAM'&&G.player?.team===1;
-  document.getElementById('goTitle').textContent=`${winnerName} WINS${isWinner?' 🏆':''}`;
-  document.getElementById('goSub').textContent=`${G.player?.kills||0} kills / ${G.player?.deaths||0} deaths`;
-  if(scores){
-    const sorted=Object.entries(scores).sort((a,b)=>b[1].k-a[1].k).slice(0,8);
-    document.getElementById('goScores').innerHTML=sorted.map((e,i)=>{
-      const rp=Object.values(remotePlayers).find(p=>p.socketId===e[0]);
-      const name=rp?.name||(e[0]===mySocketId?playerName:e[0].slice(0,8));
-      return `<div style="display:flex;gap:20px;padding:3px 0;"><span style="color:#3a6a8a;width:24px;">#${i+1}</span><span style="flex:1;color:${e[0]===mySocketId?'#ffe000':'#aaa'}">${name}</span><span style="color:var(--orange);">${e[1].k}K</span><span style="color:var(--red);">${e[1].d}D</span></div>`;
-    }).join('');
-  }
-}
+// showGameOver is defined further below (MVP card version)
 
 // ─── ADVANCED NPC AI ────────────────────────────────────────────
 function getNearestEnemy(npc){
@@ -2839,6 +2825,11 @@ function gameLoop(ts){
     if(!currentRoomId){
       G.npcs.forEach(n=>updateNPC(n,dt));
       if(Math.random()<dt*.015) addGChat(NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],GAME_CHAT_MSGS[Math.floor(Math.random()*GAME_CHAT_MSGS.length)]);
+      // Gun game offline kill detection
+      if(isGunGame() && G.player && G.player.kills > _ggLastKills){
+        _ggLastKills = G.player.kills;
+        advanceGunGame();
+      }
     }
     updateBullets(dt);
     updateSentries(dt);
@@ -3810,27 +3801,23 @@ window.startGameFromLobby = function(){
   document.getElementById('rvYesBtn').disabled = false;
   document.getElementById('rvYesBtn').textContent = '✓ REMATCH';
   document.getElementById('hudGunGame').style.display = 'none';
+  _ggLastKills = 0; // reset gun game kill counter for new game
   setTimeout(()=>{ initGunGame(); }, 100);
 };
 
 // ─── HOOK KILL EVENTS FOR GUN GAME ─────────────────────────────
-// NPC gun game kill detection — watch G.player.kills in the game loop
+// NPC gun game kill detection is injected directly into gameLoop below —
+// wrapping window.gameLoop doesn't work because rAF calls gameLoop by name.
+// The _ggLastKills variable is reset when a new game starts via startGameFromLobby.
 let _ggLastKills = 0;
-const _origGameLoop = window.gameLoop;
-window.gameLoop = function(ts){
-  _origGameLoop(ts);
-  if (isGunGame() && G.player && !currentRoomId){
-    if (G.player.kills > _ggLastKills){
-      _ggLastKills = G.player.kills;
-      advanceGunGame();
-    }
-  }
-};
 
 // ─── CONSOLIDATED FINAL handleServerMsg ────────────────────────
-// Single authoritative override — handles new types then delegates core types
+// _origHandleServerMsg safely captures the original because handleServerMsg
+// is declared with 'function' earlier (hoisted), but we re-assign the name here
+// using a plain variable assignment — subsequent calls to handleServerMsg()
+// anywhere in the code will now call this version.
 const _origHandleServerMsg = handleServerMsg;
-function handleServerMsg(msg){
+handleServerMsg = (msg) => {
   switch(msg.type){
     case 'rematch_vote_update':
       updateRematchVote(msg.yes, msg.total);
@@ -3850,7 +3837,7 @@ function handleServerMsg(msg){
     default:
       _origHandleServerMsg(msg);
   }
-}
+};
 
 // ─── ? KEY HANDLER FOR HOTKEYS ─────────────────────────────────
 document.addEventListener('keydown', e => {
