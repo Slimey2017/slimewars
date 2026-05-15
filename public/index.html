@@ -805,11 +805,17 @@ function handleServerMsg(msg) {
 
     case 'joined_room':
       currentRoomId = msg.roomId;
+      document.getElementById('chatMsgs').innerHTML = '';
       document.getElementById('lobbyName').textContent = msg.roomName;
       document.getElementById('lobbyInfo').textContent =
         `${msg.mode.toUpperCase()} · ${msg.players.length} players`;
       lockLobbyMode(msg.mode);
       renderRealLobbyPlayers(msg.players);
+      // Show password-protected notice in lobby chat (mirrors public game log behavior)
+      if (selectedServer && selectedServer.password) {
+        addLobbyMsg('SERVER', '🔒 Password-protected room — access granted.');
+      }
+      addLobbyMsg('SERVER', `Joined ${msg.roomName} · Mode: ${msg.mode.toUpperCase()}`);
       if (msg.state === 'ingame') startGameFromLobby();
       break;
 
@@ -964,6 +970,17 @@ function handleServerMsg(msg) {
       // Visual effect from another player's streak
       if (msg.streak === 'airstrike' && G.airstrikes)
         G.airstrikes.push({ x: msg.x, y: msg.y, timer: 120 });
+      // Show nuke warning radius on all other clients
+      if (msg.streak === 'nuke' && msg.x !== undefined) {
+        nukeTargetX = msg.x; nukeTargetY = msg.y;
+        nukeCountdown = 10;
+        // Countdown so the radius text ticks down correctly
+        const _rcInterval = setInterval(()=>{
+          nukeCountdown = Math.max(0, nukeCountdown - 1);
+          if(nukeCountdown <= 0){ clearInterval(_rcInterval); nukeCountdown = -1; }
+        }, 1000);
+        addGChat('SERVER','☢️ NUCLEAR STRIKE INCOMING! 10 SECONDS!');
+      }
       break;
 
     case 'weapon_pickup':
@@ -1088,7 +1105,7 @@ function confirmJoinReal() {
   if (lobbyInterval) { clearInterval(lobbyInterval); lobbyInterval = null; }
   const disp = document.getElementById('lobbyUsernameDisplay');
   if (disp) disp.textContent = playerName;
-  document.getElementById('chatMsgs').innerHTML = '';
+  // chatMsgs is cleared by the joined_room server message handler
   isReady = false;
   document.getElementById('readyBtn').textContent = 'READY UP';
   document.getElementById('readyBtn').style.borderColor = '';
@@ -1598,6 +1615,16 @@ function spawnBullet(owner,weapon,angle){
       dealDamage(owner,t,weapon.dmg+Math.random()*20|0);
       if(weapon.electric){ t.flicker=1.5; showNotif('⚡ ELECTROCUTED'); }
     }});
+    // Multiplayer: notify server about melee hits on remote players
+    if(owner.isPlayer && currentRoomId){
+      Object.values(remotePlayers).forEach(rp=>{
+        if(!rp||rp.dead||!rp.x)return;
+        if(gameMode==='tdm'&&rp.team===owner.team)return;
+        if(Math.hypot(rp.x-owner.x,rp.y-owner.y)<weapon.range+(rp.r||14)){
+          wsSend({ type:'hit_player', targetId:rp.socketId, damage:weapon.dmg+Math.random()*20|0, weapon:weapon.name });
+        }
+      });
+    }
     return;
   }
   // Landmine — place on ground
@@ -1955,18 +1982,25 @@ function updateNPC(npc,dt){
       npc.moveNoise={x:(Math.random()-.5)*.7,y:(Math.random()-.5)*.7};
     }
 
-    if(dist>optRange+60){
-      moveWithCollision(npc,(dx/mag+npc.moveNoise.x)*spd*dt,(dy/mag+npc.moveNoise.y)*spd*dt);
-    } else if(dist<optRange-80&&!w.melee){
-      // Back up + strafe
-      moveWithCollision(npc,(-dx/mag*.5+npc.moveNoise.x)*spd*dt,(-dy/mag*.5+npc.moveNoise.y)*spd*dt);
+    if(w.melee){
+      // Melee bots: always rush the target until within strike range, then attack
+      if(dist>w.range*0.85){
+        moveWithCollision(npc,(dx/mag+npc.moveNoise.x*.3)*spd*1.15*dt,(dy/mag+npc.moveNoise.y*.3)*spd*1.15*dt);
+      }
     } else {
-      // In range — strafe sideways
-      const side=Math.atan2(dy,dx)+Math.PI/2;
-      moveWithCollision(npc,Math.cos(side)*npc.moveNoise.x*spd*dt,Math.sin(side)*npc.moveNoise.y*spd*dt);
+      if(dist>optRange+60){
+        moveWithCollision(npc,(dx/mag+npc.moveNoise.x)*spd*dt,(dy/mag+npc.moveNoise.y)*spd*dt);
+      } else if(dist<optRange-80){
+        // Back up + strafe
+        moveWithCollision(npc,(-dx/mag*.5+npc.moveNoise.x)*spd*dt,(-dy/mag*.5+npc.moveNoise.y)*spd*dt);
+      } else {
+        // In range — strafe sideways
+        const side=Math.atan2(dy,dx)+Math.PI/2;
+        moveWithCollision(npc,Math.cos(side)*npc.moveNoise.x*spd*dt,Math.sin(side)*npc.moveNoise.y*spd*dt);
+      }
     }
 
-    // Shoot
+    // Shoot / Melee strike
     if(dist<w.range+10&&npc.fireCooldown<=0&&slot.curAmmo>0){
       const aimErr=(1-npc.skill)*.18;
       spawnBullet(npc,w,npc.angle+(Math.random()-.5)*aimErr);
@@ -2169,6 +2203,10 @@ function triggerNukeAt(wx,wy){
   document.getElementById('nukeStatusMsg').textContent='INCOMING NUKE @ ('+Math.round(wx)+','+Math.round(wy)+')';
   document.getElementById('nukeCountdownDisp').style.display='block';
   addGChat('SERVER','☢️ NUCLEAR STRIKE INCOMING! 10 SECONDS!');
+  // Broadcast nuke target to all other players so they see the warning radius
+  if(currentRoomId){
+    wsSend({ type:'streak_used', streak:'nuke', x:wx, y:wy });
+  }
   const cInterval=setInterval(()=>{
     nukeCountdown--;
     const el=document.getElementById('nukeCountdownDisp');
@@ -2375,7 +2413,7 @@ function render(){
   updateHUD();
   drawMinimap();
   drawCrosshair();
-  // Draw nuke target circle on canvas when targeting
+  // Draw nuke target circle on canvas when targeting OR when countdown is active
   if(nukeTargetMode&&nukeCountdown<0){
     const ox=Math.round(canvas.width/2-G.cam.x+G.shakeX);
     const oy=Math.round(canvas.height/2-G.cam.y+G.shakeY);
@@ -2394,6 +2432,35 @@ function render(){
     ctx.fillStyle='#f44';
     ctx.textAlign='center';
     ctx.fillText('☢ BLAST ZONE',mouse.wx,mouse.wy-620);
+    ctx.textAlign='left';
+    ctx.restore();
+  } else if(nukeCountdown>=0&&nukeTargetX!==undefined&&nukeTargetY!==undefined){
+    // Countdown active: always draw the blast radius so everyone can see the danger zone
+    const ox=Math.round(canvas.width/2-G.cam.x+G.shakeX);
+    const oy=Math.round(canvas.height/2-G.cam.y+G.shakeY);
+    const pulse=0.55+0.35*Math.abs(Math.sin(Date.now()/250));
+    ctx.save();
+    ctx.translate(ox,oy);
+    ctx.strokeStyle=`rgba(255,30,30,${pulse})`;
+    ctx.lineWidth=4;
+    ctx.setLineDash([16,10]);
+    ctx.beginPath();
+    ctx.arc(nukeTargetX,nukeTargetY,600,0,Math.PI*2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=`rgba(255,0,0,${pulse*0.18})`;
+    ctx.beginPath();
+    ctx.arc(nukeTargetX,nukeTargetY,600,0,Math.PI*2);
+    ctx.fill();
+    // Crosshair at center
+    ctx.strokeStyle=`rgba(255,60,60,${pulse})`;
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(nukeTargetX-30,nukeTargetY); ctx.lineTo(nukeTargetX+30,nukeTargetY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(nukeTargetX,nukeTargetY-30); ctx.lineTo(nukeTargetX,nukeTargetY+30); ctx.stroke();
+    ctx.font="bold 13px 'Orbitron'";
+    ctx.fillStyle='#f44';
+    ctx.textAlign='center';
+    ctx.fillText(`☢ IMPACT IN ${nukeCountdown}s`,nukeTargetX,nukeTargetY-630);
     ctx.textAlign='left';
     ctx.restore();
   }
@@ -2804,9 +2871,11 @@ function drawMinimap(){
 }
 
 // ─── GAME LOOP ─────────────────────────────────────────────────
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden && G && G.lastTime) G.lastTime=performance.now(); });
 function gameLoop(ts){
   if(!G.gameOver){
-    const dt=Math.min((ts-G.lastTime)/1000,.05);
+    const rawDt=(ts-G.lastTime)/1000;
+    const dt=Math.min(rawDt<0?0:rawDt,.033); // cap at ~30fps-equivalent delta to prevent glitch spikes
     G.lastTime=ts; G.gameTime+=dt;
     G.frameCount++; G.fpsTimer+=dt;
     if(G.fpsTimer>=.5){G.fps=Math.round(G.frameCount/G.fpsTimer);G.frameCount=0;G.fpsTimer=0;}
