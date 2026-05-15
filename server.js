@@ -520,7 +520,7 @@ function handleMessage(ws, msg) {
       const yes = room.rematchVotes.size;
       broadcast(room, { type: 'rematch_vote_update', yes, total });
       // Auto-start rematch if majority votes yes
-      if (yes >= Math.ceil(total / 2) && room.state === 'lobby') {
+      if (yes >= Math.ceil(total / 2) && (room.state === 'lobby' || room.state === 'gameover')) {
         room.rematchVotes.clear();
         setTimeout(() => startGame(room), 2000);
       }
