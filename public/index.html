@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -441,7 +441,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <button class="mdbtn on" id="btnFFA">FREE FOR ALL</button>
       <button class="mdbtn" id="btnTDM">TEAM DEATHMATCH</button>
     </div>
-    <button class="btn sm red" onclick="showScreen('sBrowser')">← LEAVE</button>
+    <button class="btn sm red" onclick="leaveAndBrowse()">← LEAVE</button>
   </div>
   <div class="panel" style="overflow-y:auto;">
     <div class="ptitle" id="playerCountLabel">PLAYERS (0/12)</div>
@@ -3202,6 +3202,12 @@ function startGameFromLobby(){
   requestAnimationFrame(ts=>{G.lastTime=ts;animFrame=requestAnimationFrame(gameLoop);});
 }
 
+function leaveAndBrowse(){
+  if(lobbyInterval){clearInterval(lobbyInterval);lobbyInterval=null;}
+  if(currentRoomId){ wsSend({type:'leave_room'}); currentRoomId=null; remotePlayers={}; }
+  showScreen('sBrowser');
+}
+
 function exitToMenu(){
   if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
   if(lobbyInterval){clearInterval(lobbyInterval);lobbyInterval=null;}
@@ -3785,7 +3791,44 @@ window.showScreen = function(id){
 };
 
 // ─── HANDLE NEW SERVER MESSAGES ────────────────────────────────
-// Extend handleServerMsg for new message types
+// Extended message types are handled in the final handleServerMsg below
+
+// ─── PATCH showGameOver TO SHOW MVP CARD ───────────────────────
+function showGameOver(winnerName, scores){
+  showMVPCard(winnerName, scores || G.scores);
+  document.getElementById('rematchVote').classList.add('vis');
+  rematchVotes = {yes:0, total:Object.keys(scores||G.scores).length};
+  updateRematchVote(0, rematchVotes.total);
+}
+
+// ─── PATCH INIT ─────────────────────────────────────────────────
+const _origStartGameFromLobby = startGameFromLobby;
+window.startGameFromLobby = function(){
+  _origStartGameFromLobby();
+  document.getElementById('mvpCard').classList.remove('vis');
+  document.getElementById('rematchVote').classList.remove('vis');
+  document.getElementById('rvYesBtn').disabled = false;
+  document.getElementById('rvYesBtn').textContent = '✓ REMATCH';
+  document.getElementById('hudGunGame').style.display = 'none';
+  setTimeout(()=>{ initGunGame(); }, 100);
+};
+
+// ─── HOOK KILL EVENTS FOR GUN GAME ─────────────────────────────
+// NPC gun game kill detection — watch G.player.kills in the game loop
+let _ggLastKills = 0;
+const _origGameLoop = window.gameLoop;
+window.gameLoop = function(ts){
+  _origGameLoop(ts);
+  if (isGunGame() && G.player && !currentRoomId){
+    if (G.player.kills > _ggLastKills){
+      _ggLastKills = G.player.kills;
+      advanceGunGame();
+    }
+  }
+};
+
+// ─── CONSOLIDATED FINAL handleServerMsg ────────────────────────
+// Single authoritative override — handles new types then delegates core types
 const _origHandleServerMsg = handleServerMsg;
 function handleServerMsg(msg){
   switch(msg.type){
@@ -3800,78 +3843,14 @@ function handleServerMsg(msg){
       showNotif('⛔ YOU WERE KICKED FROM THE ROOM');
       setTimeout(exitToMenu, 2000);
       break;
+    case 'kill_confirmed':
+      _origHandleServerMsg(msg);
+      if (isGunGame()) advanceGunGame();
+      break;
     default:
       _origHandleServerMsg(msg);
   }
 }
-
-// ─── PATCH showGameOver TO SHOW MVP CARD ───────────────────────
-function showGameOver(winnerName, scores){
-  showMVPCard(winnerName, scores || G.scores);
-  document.getElementById('rematchVote').classList.add('vis');
-  rematchVotes = {yes:0, total:Object.keys(scores||G.scores).length};
-  updateRematchVote(0, rematchVotes.total);
-}
-
-// ─── PATCH INIT ─────────────────────────────────────────────────
-// After startGameFromLobby, init gun game if needed
-const _origStartGameFromLobby = startGameFromLobby;
-window.startGameFromLobby = function(){
-  _origStartGameFromLobby();
-  document.getElementById('mvpCard').classList.remove('vis');
-  document.getElementById('rematchVote').classList.remove('vis');
-  document.getElementById('rvYesBtn').disabled = false;
-  document.getElementById('rvYesBtn').textContent = '✓ REMATCH';
-  document.getElementById('hudGunGame').style.display = 'none';
-  setTimeout(()=>{ initGunGame(); }, 100);
-};
-
-// ─── HOOK KILL EVENTS FOR GUN GAME ─────────────────────────────
-// The existing kill_confirmed handler in handleServerMsg triggers _ggKillHook
-const _origKillConfirmedHook = window.handleServerMsg;
-// Patch the kill_confirmed case of the original handler
-const __innerOrig = _origHandleServerMsg;
-// We re-wrap once more to inject gun game advance on kill_confirmed
-function handleServerMsg(msg){ // final override
-  if (msg.type === 'kill_confirmed' && isGunGame()) {
-    __innerOrig(msg);
-    advanceGunGame();
-    return;
-  }
-  switch(msg.type){
-    case 'rematch_vote_update':
-      updateRematchVote(msg.yes, msg.total);
-      break;
-    case 'gungame_advance':
-      if (msg.socketId !== mySocketId && remotePlayers[msg.socketId])
-        remotePlayers[msg.socketId].ggSlot = msg.slot;
-      break;
-    case 'kick':
-      showNotif('⛔ YOU WERE KICKED FROM THE ROOM');
-      setTimeout(exitToMenu, 2000);
-      break;
-    default:
-      __innerOrig(msg);
-  }
-}
-
-// Also hook NPC kill path (offline gun game)
-const _origDealDamage = window.dealDamage;
-// We can't easily patch dealDamage here since it may not be defined yet — 
-// instead patch the kill_confirmed branch via keydown hook:
-// For offline: hook into existing NPC kill detection via the G.scores update path.
-// We watch G.player.kills changes in the game loop:
-let _ggLastKills = 0;
-const _origGameLoop = window.gameLoop;
-window.gameLoop = function(ts){
-  _origGameLoop(ts);
-  if (isGunGame() && G.player && !currentRoomId){
-    if (G.player.kills > _ggLastKills){
-      _ggLastKills = G.player.kills;
-      advanceGunGame();
-    }
-  }
-};
 
 // ─── ? KEY HANDLER FOR HOTKEYS ─────────────────────────────────
 document.addEventListener('keydown', e => {
