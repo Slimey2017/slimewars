@@ -282,6 +282,86 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 /* Crosshair */
 #hudCross{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;transition:all .1s;}
+
+/* ── GUN GAME banner ───────────────────────────────────── */
+#hudGunGame{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(5,12,25,.85);border:1px solid var(--orange);padding:4px 18px;text-align:center;pointer-events:none;}
+.gg-weapon{font-family:'Orbitron';font-size:13px;color:var(--orange);letter-spacing:2px;}
+.gg-progress{font-size:9px;color:#6a8aaa;letter-spacing:2px;margin-top:1px;}
+
+/* ── MVP card overlay ──────────────────────────────────── */
+#mvpCard{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);align-items:center;justify-content:center;z-index:500;flex-direction:column;gap:0;}
+#mvpCard.vis{display:flex;}
+.mvp-box{background:linear-gradient(160deg,#0d1e38 0%,#0a1520 100%);border:2px solid var(--orange);border-radius:8px;padding:36px 52px;text-align:center;position:relative;overflow:hidden;min-width:480px;}
+.mvp-box::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(249,115,22,.12) 0%,transparent 70%);pointer-events:none;}
+.mvp-title{font-family:'Fredoka One',cursive;font-size:42px;background:linear-gradient(180deg,#fbbf24,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px;}
+.mvp-winner{font-family:'Orbitron';font-size:18px;color:#fff;letter-spacing:3px;margin-bottom:20px;}
+.mvp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px;}
+.mvp-stat{background:rgba(0,0,0,.4);border:1px solid #1e3050;border-radius:4px;padding:12px 8px;}
+.mvp-stat-icon{font-size:22px;margin-bottom:4px;}
+.mvp-stat-val{font-family:'Orbitron';font-size:20px;color:var(--orange);}
+.mvp-stat-lbl{font-size:9px;color:#4a6a8a;letter-spacing:2px;margin-top:2px;}
+.mvp-row{display:flex;gap:8px;justify-content:center;align-items:center;margin-bottom:18px;font-size:11px;color:#6a8aaa;flex-wrap:wrap;}
+.mvp-badge{padding:3px 10px;border:1px solid var(--orange);color:var(--orange);border-radius:2px;font-size:10px;letter-spacing:1px;}
+.mvp-actions{display:flex;gap:10px;justify-content:center;}
+
+/* ── Hotkey overlay ────────────────────────────────────── */
+#hotkeyOverlay{display:none;position:absolute;inset:0;background:rgba(0,0,0,.82);align-items:center;justify-content:center;z-index:300;pointer-events:auto;}
+#hotkeyOverlay.vis{display:flex;}
+.hk-box{background:#111c2a;border:1px solid #1e3a5a;border-radius:6px;padding:24px 32px;min-width:400px;}
+.hk-title{font-family:'Orbitron';font-size:16px;color:var(--orange);letter-spacing:3px;margin-bottom:16px;text-align:center;}
+.hk-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 24px;}
+.hk-row{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(26,53,80,.3);font-size:11px;}
+.hk-key{color:var(--orange);font-family:'Orbitron';font-size:10px;background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.3);padding:1px 7px;border-radius:2px;}
+.hk-desc{color:#8aacbc;}
+.hk-close{margin-top:14px;text-align:center;}
+
+/* ── Password modal ────────────────────────────────────── */
+#pwModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);align-items:center;justify-content:center;z-index:400;}
+#pwModal.vis{display:flex;}
+.pw-box{background:#111c2a;border:1px solid #1e3a5a;border-radius:6px;padding:28px 36px;min-width:320px;text-align:center;}
+.pw-title{font-family:'Orbitron';font-size:16px;color:var(--orange);letter-spacing:2px;margin-bottom:14px;}
+.pw-input{width:100%;padding:8px 12px;background:rgba(0,0,0,.6);border:1px solid #2a4060;border-bottom-color:var(--orange);color:#fff;font-family:'Share Tech Mono';font-size:14px;outline:none;margin-bottom:14px;text-align:center;letter-spacing:4px;}
+.pw-row{display:flex;gap:10px;justify-content:center;}
+
+/* ── Rematch vote ──────────────────────────────────────── */
+#rematchVote{display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,12,25,.97);border:1px solid var(--blue);padding:28px 40px;text-align:center;z-index:150;min-width:300px;}
+#rematchVote.vis{display:block;}
+.rv-title{font-family:'Orbitron';font-size:18px;color:var(--blue);letter-spacing:2px;margin-bottom:8px;}
+.rv-count{font-size:13px;color:#6a8aaa;margin-bottom:16px;}
+.rv-bar{width:100%;height:6px;background:#1a3050;border-radius:3px;margin-bottom:16px;}
+.rv-barfill{height:100%;background:var(--blue);border-radius:3px;transition:width .3s;}
+.rv-actions{display:flex;gap:10px;justify-content:center;}
+
+/* ── Server browser filter bar ─────────────────────────── */
+.srv-filter{display:flex;gap:8px;align-items:center;padding:8px 0;flex-wrap:wrap;}
+.filter-lbl{font-size:10px;color:#3a6a8a;letter-spacing:2px;}
+.filter-btn{padding:4px 12px;background:transparent;border:1px solid #2a4060;color:#6a8aaa;font-family:'Share Tech Mono';font-size:10px;cursor:pointer;letter-spacing:1px;transition:.12s;border-radius:2px;}
+.filter-btn.on{border-color:var(--blue);color:var(--blue);background:rgba(51,170,255,.08);}
+.filter-search{padding:4px 8px;background:rgba(0,0,0,.4);border:1px solid #2a4060;border-bottom-color:var(--blue);color:#aac;font-family:'Share Tech Mono';font-size:11px;outline:none;width:160px;}
+
+/* ── Mobile touch controls ─────────────────────────────── */
+#touchControls{display:none;position:absolute;inset:0;pointer-events:none;z-index:50;}
+#touchControls.vis{display:block;}
+#joystickZone{position:absolute;bottom:100px;left:30px;width:130px;height:130px;pointer-events:auto;}
+.joystick-base{width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.07);border:2px solid rgba(255,255,255,.15);position:absolute;}
+#joystickKnob{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.4);position:absolute;top:38px;left:38px;transition:transform .05s;}
+#touchShoot{position:absolute;bottom:100px;right:30px;width:80px;height:80px;border-radius:50%;background:rgba(255,60,60,.25);border:2px solid rgba(255,80,80,.5);pointer-events:auto;display:flex;align-items:center;justify-content:center;font-size:28px;color:#f88;}
+#touchReload{position:absolute;bottom:200px;right:30px;width:54px;height:54px;border-radius:50%;background:rgba(51,170,255,.2);border:2px solid rgba(51,170,255,.4);pointer-events:auto;display:flex;align-items:center;justify-content:center;font-size:18px;color:#3af;}
+#touchADS{position:absolute;bottom:200px;left:30px;width:54px;height:54px;border-radius:50%;background:rgba(249,115,22,.2);border:2px solid rgba(249,115,22,.4);pointer-events:auto;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--orange);}
+
+/* ── Crosshair style selector (in settings) ────────────── */
+.xhair-grid{display:flex;gap:8px;margin-top:4px;}
+.xhair-opt{width:44px;height:44px;background:rgba(0,0,0,.5);border:1px solid #2a4060;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.12s;}
+.xhair-opt:hover{border-color:#3af;}
+.xhair-opt.on{border-color:var(--orange);background:rgba(249,115,22,.1);}
+.xhair-opt canvas{display:block;}
+.color-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+.color-swatch{width:22px;height:22px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.12s;}
+.color-swatch.on{border-color:#fff;transform:scale(1.2);}
+
+/* ── Separate SFX / Music volume rows ─────────────────── */
+.vol-sub-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px 12px;border-bottom:1px solid rgba(26,53,80,.2);}
+.vol-sub-lbl{font-size:11px;color:#4a7a8a;}
 </style>
 </head>
 <body>
@@ -314,7 +394,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- SERVER BROWSER -->
 <div id="sBrowser" class="screen">
-  <div style="padding:28px;display:flex;flex-direction:column;gap:16px;width:100%;">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:12px;width:100%;">
     <div class="screen-hdr">
       <div class="screen-title">SERVER BROWSER</div>
       <div id="wsStatus" style="font-size:10px;padding:3px 8px;border-radius:2px;border:1px solid #1a3050;color:#4a7a9a;">● CONNECTING</div>
@@ -322,6 +402,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <button class="btn sm" onclick="populateServers()">↻ REFRESH</button>
       <button class="btn sm" onclick="createNewRoom()">+ CREATE ROOM</button>
       <button class="btn sm" onclick="showScreen('sMenu')">← BACK</button>
+    </div>
+    <!-- Filter bar -->
+    <div class="srv-filter">
+      <span class="filter-lbl">MODE:</span>
+      <button class="filter-btn on" id="fAll" onclick="setServerFilter('all',this)">ALL</button>
+      <button class="filter-btn" id="fFFA" onclick="setServerFilter('ffa',this)">FFA</button>
+      <button class="filter-btn" id="fTDM" onclick="setServerFilter('tdm',this)">TDM</button>
+      <button class="filter-btn" id="fGG" onclick="setServerFilter('gungame',this)">GUN GAME</button>
+      <span class="filter-lbl" style="margin-left:12px;">STATUS:</span>
+      <button class="filter-btn on" id="fOpen" onclick="toggleFilterOpen(this)">OPEN ONLY</button>
+      <input class="filter-search" id="srvSearch" placeholder="Search name..." oninput="applyServerFilters()">
     </div>
     <div style="overflow-y:auto;flex:1;">
       <table class="srv-tbl"><thead><tr>
@@ -376,23 +467,38 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- SETTINGS -->
 <div id="sSettings" class="screen">
-  <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:520px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:10px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:560px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:10px;">
     <div class="screen-title">SETTINGS</div>
     <button class="btn sm" onclick="showScreen('sMenu')">← BACK</button>
   </div>
-  <div class="set-wrap">
+  <div class="set-wrap" style="max-width:560px;overflow-y:auto;max-height:calc(100vh - 120px);">
+    <!-- Volume section -->
     <div class="set-row"><div><div class="set-lbl">MASTER VOLUME</div></div><input type="range" min="0" max="100" value="70" id="stVol" oninput="updateVolume(this.value)"></div>
+    <div class="vol-sub-row"><div class="vol-sub-lbl">🎵 MUSIC</div><input type="range" min="0" max="100" value="70" id="stMusicVol" oninput="updateMusicVolume(this.value)"></div>
+    <div class="vol-sub-row" style="border-bottom:1px solid rgba(26,53,80,.4);padding-bottom:14px;"><div class="vol-sub-lbl">🔊 SFX</div><input type="range" min="0" max="100" value="70" id="stSfxVol" oninput="updateSfxVolume(this.value)"></div>
+    <!-- Gameplay -->
     <div class="set-row"><div><div class="set-lbl">MOUSE SENSITIVITY</div></div><input type="range" min="1" max="10" value="5" id="stSens"></div>
-    <div class="set-row"><div><div class="set-lbl">SHOW MINIMAP</div></div><div class="toggle on" id="tgMM" onclick="this.classList.toggle('on')"></div></div>
-    <div class="set-row"><div><div class="set-lbl">DAMAGE NUMBERS</div></div><div class="toggle on" id="tgDmg" onclick="this.classList.toggle('on')"></div></div>
-    <div class="set-row"><div><div class="set-lbl">AUTO-RELOAD</div></div><div class="toggle on" id="tgAR" onclick="this.classList.toggle('on')"></div></div>
-    <div class="set-row"><div><div class="set-lbl">FOOTSTEP SOUNDS</div></div><div class="toggle on" id="tgFootstep" onclick="this.classList.toggle('on')"></div></div>
-    <div class="set-row"><div><div class="set-lbl">SHOW FPS</div></div><div class="toggle" id="tgFPS" onclick="this.classList.toggle('on')"></div></div>
-    <div class="set-row"><div><div class="set-lbl">ENABLE NUKE (8-kill streak)</div><div class="set-sub">Players can call a nuclear strike after 8 kills</div></div><div class="toggle on" id="tgNuke" onclick="this.classList.toggle('on');nukeEnabled=this.classList.contains('on')"></div></div>
+    <div class="set-row"><div><div class="set-lbl">SHOW MINIMAP</div></div><div class="toggle on" id="tgMM" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">DAMAGE NUMBERS</div></div><div class="toggle on" id="tgDmg" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">AUTO-RELOAD</div></div><div class="toggle on" id="tgAR" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">FOOTSTEP SOUNDS</div></div><div class="toggle on" id="tgFootstep" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">SHOW FPS</div></div><div class="toggle" id="tgFPS" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">SHOW PING IN HUD</div></div><div class="toggle on" id="tgPing" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">ENABLE NUKE (8-kill streak)</div><div class="set-sub">Players can call a nuclear strike after 8 kills</div></div><div class="toggle on" id="tgNuke" onclick="this.classList.toggle('on');nukeEnabled=this.classList.contains('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">COLORBLIND MODE</div><div class="set-sub">Replaces red/blue teams with yellow/purple</div></div><div class="toggle" id="tgColorblind" onclick="this.classList.toggle('on');applyColorblindMode(this.classList.contains('on'));saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">PERFORMANCE MODE</div><div class="set-sub">Disables particles & effects (better FPS)</div></div><div class="toggle" id="tgPerf" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">MOBILE CONTROLS</div><div class="set-sub">Show virtual joystick and buttons</div></div><div class="toggle" id="tgMobile" onclick="this.classList.toggle('on');toggleMobileControls(this.classList.contains('on'));saveSettings()"></div></div>
+    <!-- Crosshair -->
+    <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+      <div class="set-lbl">CROSSHAIR STYLE</div>
+      <div class="xhair-grid" id="xhairGrid"></div>
+      <div style="font-size:10px;color:#3a6a8a;letter-spacing:2px;margin-top:2px;">COLOR</div>
+      <div class="color-row" id="xhairColorRow"></div>
+    </div>
     <div class="set-row" style="border:none;margin-top:10px;justify-content:center;">
       <div style="font-size:10px;color:#3a5a6a;text-align:center;line-height:1.8;">
         WASD=Move · Shift=Sprint · C=Slide · RMB/Q=ADS · LMB=Shoot<br>
-        R=Reload · 1-5=Weapons · T=Chat · Tab=Scoreboard<br>
+        R=Reload · 1-5=Weapons · T=Chat · Tab=Scoreboard · ?=Controls<br>
         F=Killstreak 1 · G=Killstreak 2 · N=NUKE · Esc=Menu
       </div>
     </div>
@@ -452,6 +558,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
   <!-- Mute Button -->
   <div id="hudMute" onclick="toggleMute()" style="position:absolute;top:16px;right:16px;cursor:pointer;font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;padding:5px 10px;background:rgba(5,12,25,.8);border:1px solid var(--border);color:#4a7a9a;z-index:100;pointer-events:auto;user-select:none;" title="Toggle Music">🔊 MUSIC</div>
+  <!-- Controls help -->
+  <div onclick="document.getElementById('hotkeyOverlay').classList.toggle('vis')" style="position:absolute;top:16px;right:105px;cursor:pointer;font-family:'Share Tech Mono';font-size:10px;letter-spacing:2px;padding:5px 10px;background:rgba(5,12,25,.8);border:1px solid var(--border);color:#4a7a9a;z-index:100;pointer-events:auto;user-select:none;" title="Controls">? KEYS</div>
 
   <!-- Score -->
   <div class="hud" id="hudScore">
@@ -550,6 +658,89 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   <div id="hudFPS">60 FPS</div>
   <!-- Online status / ping -->
   <div id="hudPing" style="display:none;position:absolute;top:16px;left:170px;font-size:10px;color:#2a4a6a;letter-spacing:1px;"></div>
+
+  <!-- Gun Game weapon progress -->
+  <div class="hud" id="hudGunGame" style="display:none;">
+    <div class="gg-weapon" id="ggWeaponName">PISTOL</div>
+    <div class="gg-progress" id="ggProgress">KILL 1 TO ADVANCE</div>
+  </div>
+
+  <!-- Hotkey Overlay -->
+  <div id="hotkeyOverlay">
+    <div class="hk-box">
+      <div class="hk-title">⌨ CONTROLS</div>
+      <div class="hk-grid">
+        <div class="hk-row"><span class="hk-key">WASD</span><span class="hk-desc">Move</span></div>
+        <div class="hk-row"><span class="hk-key">LMB</span><span class="hk-desc">Shoot</span></div>
+        <div class="hk-row"><span class="hk-key">SHIFT</span><span class="hk-desc">Sprint</span></div>
+        <div class="hk-row"><span class="hk-key">RMB / Q</span><span class="hk-desc">ADS</span></div>
+        <div class="hk-row"><span class="hk-key">C</span><span class="hk-desc">Slide</span></div>
+        <div class="hk-row"><span class="hk-key">R</span><span class="hk-desc">Reload</span></div>
+        <div class="hk-row"><span class="hk-key">1-5</span><span class="hk-desc">Weapons</span></div>
+        <div class="hk-row"><span class="hk-key">F / G</span><span class="hk-desc">Scorestreaks</span></div>
+        <div class="hk-row"><span class="hk-key">N</span><span class="hk-desc">Nuke (if ready)</span></div>
+        <div class="hk-row"><span class="hk-key">T</span><span class="hk-desc">Chat</span></div>
+        <div class="hk-row"><span class="hk-key">TAB</span><span class="hk-desc">Scoreboard</span></div>
+        <div class="hk-row"><span class="hk-key">ESC</span><span class="hk-desc">Main Menu</span></div>
+        <div class="hk-row"><span class="hk-key">?</span><span class="hk-desc">This screen</span></div>
+        <div class="hk-row"><span class="hk-key">SCROLL</span><span class="hk-desc">Switch weapon</span></div>
+      </div>
+      <div class="hk-close"><button class="btn sm" onclick="document.getElementById('hotkeyOverlay').classList.remove('vis')">CLOSE</button></div>
+    </div>
+  </div>
+
+  <!-- Mobile touch controls -->
+  <div id="touchControls">
+    <div id="joystickZone">
+      <div class="joystick-base"></div>
+      <div id="joystickKnob"></div>
+    </div>
+    <div id="touchShoot">🔫</div>
+    <div id="touchReload">R</div>
+    <div id="touchADS">🎯</div>
+  </div>
+
+  <!-- Rematch vote -->
+  <div id="rematchVote">
+    <div class="rv-title">PLAY AGAIN?</div>
+    <div class="rv-count" id="rvCount">0 / 0 voted</div>
+    <div class="rv-bar"><div class="rv-barfill" id="rvBarFill" style="width:0%"></div></div>
+    <div class="rv-actions">
+      <button class="btn" id="rvYesBtn" onclick="castRematchVote(true)">✓ REMATCH</button>
+      <button class="btn red" onclick="exitToMenu()">← MENU</button>
+    </div>
+  </div>
+
+<!-- MVP card (outside #sGame so it overlays everything) -->
+<div id="mvpCard">
+  <div class="mvp-box">
+    <div class="mvp-title">🏆 GAME OVER</div>
+    <div class="mvp-winner" id="mvpWinnerName">—</div>
+    <div class="mvp-grid">
+      <div class="mvp-stat"><div class="mvp-stat-icon">💀</div><div class="mvp-stat-val" id="mvpTopKiller">—</div><div class="mvp-stat-lbl">TOP KILLER</div></div>
+      <div class="mvp-stat"><div class="mvp-stat-icon">🎯</div><div class="mvp-stat-val" id="mvpMostKills">0</div><div class="mvp-stat-lbl">MOST KILLS</div></div>
+      <div class="mvp-stat"><div class="mvp-stat-icon">☠️</div><div class="mvp-stat-val" id="mvpMostDeaths">0</div><div class="mvp-stat-lbl">MOST DEATHS</div></div>
+    </div>
+    <div class="mvp-row" id="mvpBadges"></div>
+    <div id="mvpScoreList" style="font-size:11px;text-align:left;margin-bottom:18px;max-height:120px;overflow-y:auto;"></div>
+    <div class="mvp-actions">
+      <button class="btn" id="mvpRematch" onclick="castRematchVote(true)">↺ REMATCH</button>
+      <button class="btn" onclick="exitToMenu()">← MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- Password modal -->
+<div id="pwModal">
+  <div class="pw-box">
+    <div class="pw-title">🔒 ROOM PASSWORD</div>
+    <input class="pw-input" id="pwInput" placeholder="ENTER PASSWORD" maxlength="20" onkeydown="if(event.key==='Enter')submitRoomPassword()">
+    <div class="pw-row">
+      <button class="btn" onclick="submitRoomPassword()">JOIN</button>
+      <button class="btn red" onclick="document.getElementById('pwModal').classList.remove('vis')">CANCEL</button>
+    </div>
+  </div>
+</div>
 
 <script>
 'use strict';
@@ -803,35 +994,84 @@ function handleServerMsg(msg) {
   }
 }
 
+let _allServerData = [];
+let _srvFilterMode = 'all';
+let _srvFilterOpenOnly = true;
+
+function setServerFilter(mode, btn){
+  _srvFilterMode = mode;
+  document.querySelectorAll('.filter-btn').forEach(b=>{
+    if(['fAll','fFFA','fTDM','fGG'].includes(b.id)) b.classList.remove('on');
+  });
+  btn.classList.add('on');
+  applyServerFilters();
+}
+function toggleFilterOpen(btn){
+  _srvFilterOpenOnly = !_srvFilterOpenOnly;
+  btn.classList.toggle('on', _srvFilterOpenOnly);
+  applyServerFilters();
+}
+function applyServerFilters(){
+  const search = (document.getElementById('srvSearch')?.value||'').toLowerCase();
+  let rooms = _allServerData;
+  if(_srvFilterMode !== 'all') rooms = rooms.filter(r=>r.mode===_srvFilterMode);
+  if(_srvFilterOpenOnly) rooms = rooms.filter(r=>r.players < r.max);
+  if(search) rooms = rooms.filter(r=>r.name.toLowerCase().includes(search));
+  renderServerRows(rooms);
+}
+
 function populateRealServers(rooms) {
+  _allServerData = rooms;
   const body = document.getElementById('srvBody');
   if (!body) return;
   let total = 0; rooms.forEach(r => total += r.players);
   const el = document.getElementById('onlineCount');
   if (el) el.textContent = `${total} PLAYERS ONLINE`;
+  applyServerFilters();
+}
+
+function renderServerRows(rooms){
+  const body = document.getElementById('srvBody');
+  if (!body) return;
   if (rooms.length === 0) {
-    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#4a7a9a;padding:20px;">No rooms yet — create one!</td></tr>';
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#4a7a9a;padding:20px;">No matching rooms — create one!</td></tr>';
     return;
   }
+  const modeLabel = {ffa:'FFA',tdm:'TDM',gungame:'GUN GAME'};
+  const modeClass = {ffa:'tag-ffa',tdm:'tag-tdm',gungame:'tag-ffa'};
   body.innerHTML = rooms.map(r => {
     const ping = r.ping || Math.floor(Math.random() * 40) + 5;
     const pc = ping < 60 ? 'p-good' : ping < 120 ? 'p-ok' : 'p-bad';
     const full = r.players >= r.max;
-    return `<tr class="srv-row" onclick="joinRealRoom('${r.id}')">
-      <td><span class="srv-name">${r.name}</span></td>
+    const lock = r.hasPassword ? '🔒 ' : '';
+    return `<tr class="srv-row" onclick="joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')">
+      <td><span class="srv-name">${lock}${r.name}</span></td>
       <td style="color:#5a8a6a;">${r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY'}</td>
-      <td><span class="tag tag-${r.mode}">${r.mode.toUpperCase()}</span></td>
+      <td><span class="tag ${modeClass[r.mode]||'tag-ffa'}">${modeLabel[r.mode]||r.mode.toUpperCase()}</span></td>
       <td>${r.players}/${r.max}</td>
       <td class="${pc}">${ping}ms</td>
-      <td><button class="btn sm" ${full ? 'disabled' : ''} onclick="event.stopPropagation();joinRealRoom('${r.id}')">${full ? 'FULL' : 'JOIN'}</button></td>
+      <td><button class="btn sm" ${full ? 'disabled' : ''} onclick="event.stopPropagation();joinRealRoom('${r.id}','${r.hasPassword?'1':'0'}')">${full ? 'FULL' : 'JOIN'}</button></td>
     </tr>`;
   }).join('');
 }
 
-function joinRealRoom(roomId) {
+let _pendingJoinRoomId = null;
+function joinRealRoom(roomId, hasPassword) {
   if (!wsConnected) { showNotif('⚠️ Not connected to server'); return; }
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  selectedServer = { isReal: true, roomId };
+  _pendingJoinRoomId = roomId;
+  if (hasPassword === '1') {
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwModal').classList.add('vis');
+  } else {
+    selectedServer = { isReal: true, roomId };
+    showScreen('sStreakSelect');
+  }
+}
+function submitRoomPassword(){
+  const pw = document.getElementById('pwInput').value.trim();
+  document.getElementById('pwModal').classList.remove('vis');
+  selectedServer = { isReal: true, roomId: _pendingJoinRoomId, password: pw };
   showScreen('sStreakSelect');
 }
 
@@ -840,6 +1080,7 @@ function confirmJoinReal() {
   wsSend({
     type: 'join_room',
     roomId: selectedServer.roomId,
+    password: selectedServer.password || '',
     playerInfo: { name: playerName, skin: playerSkin,
       hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
   });
@@ -882,9 +1123,12 @@ function updateWsStatus(){
 function createNewRoom(){
   if(!wsConnected){ showNotif('⚠️ Not connected to server'); return; }
   const name = prompt('Room name (leave blank for auto):', '') || '';
-  const mode = confirm('Team Deathmatch? (Cancel = FFA)') ? 'tdm' : 'ffa';
+  const modeChoice = prompt('Game mode:\n1 = Free For All\n2 = Team Deathmatch\n3 = Gun Game', '1');
+  const modeMap = {'1':'ffa','2':'tdm','3':'gungame'};
+  const mode = modeMap[modeChoice] || 'ffa';
+  const pw = prompt('Room password (leave blank for public):', '') || '';
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  selectedServer = { isReal: true, creating: true, name, mode };
+  selectedServer = { isReal: true, creating: true, name, mode, password: pw };
   showScreen('sStreakSelect');
 }
 
@@ -912,6 +1156,7 @@ window.confirmJoinReal = function(){
       type: 'create_room',
       name: selectedServer.name,
       mode: selectedServer.mode,
+      password: selectedServer.password || '',
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
@@ -3161,6 +3406,483 @@ function toggleMute(){
   if(inGame) inGame.textContent = label;
   if(inMenu) inMenu.textContent = label;
 }
+
+// ─── SETTINGS PERSISTENCE ──────────────────────────────────────
+function saveSettings(){
+  try {
+    const s = {
+      vol: document.getElementById('stVol')?.value,
+      musicVol: document.getElementById('stMusicVol')?.value,
+      sfxVol: document.getElementById('stSfxVol')?.value,
+      sens: document.getElementById('stSens')?.value,
+      minimap: document.getElementById('tgMM')?.classList.contains('on'),
+      dmgNums: document.getElementById('tgDmg')?.classList.contains('on'),
+      autoReload: document.getElementById('tgAR')?.classList.contains('on'),
+      footsteps: document.getElementById('tgFootstep')?.classList.contains('on'),
+      fps: document.getElementById('tgFPS')?.classList.contains('on'),
+      ping: document.getElementById('tgPing')?.classList.contains('on'),
+      nuke: document.getElementById('tgNuke')?.classList.contains('on'),
+      colorblind: document.getElementById('tgColorblind')?.classList.contains('on'),
+      perf: document.getElementById('tgPerf')?.classList.contains('on'),
+      mobile: document.getElementById('tgMobile')?.classList.contains('on'),
+      xhairStyle: xhairStyle,
+      xhairColor: xhairColor,
+      username: playerName,
+    };
+    localStorage.setItem('slimeWarsSettings', JSON.stringify(s));
+  } catch(e){}
+}
+
+function loadSettings(){
+  try {
+    const raw = localStorage.getItem('slimeWarsSettings');
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    const setToggle = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.toggle('on', !!val); }
+    };
+    if (s.vol !== undefined) { const el = document.getElementById('stVol'); if(el){el.value=s.vol; updateVolume(s.vol);} }
+    if (s.musicVol !== undefined) { const el = document.getElementById('stMusicVol'); if(el){el.value=s.musicVol; updateMusicVolume(s.musicVol);} }
+    if (s.sfxVol !== undefined) { const el = document.getElementById('stSfxVol'); if(el){el.value=s.sfxVol; updateSfxVolume(s.sfxVol);} }
+    if (s.sens !== undefined) { const el = document.getElementById('stSens'); if(el) el.value=s.sens; }
+    setToggle('tgMM', s.minimap !== false);
+    setToggle('tgDmg', s.dmgNums !== false);
+    setToggle('tgAR', s.autoReload !== false);
+    setToggle('tgFootstep', s.footsteps !== false);
+    setToggle('tgFPS', !!s.fps);
+    setToggle('tgPing', s.ping !== false);
+    setToggle('tgNuke', s.nuke !== false);
+    setToggle('tgColorblind', !!s.colorblind);
+    setToggle('tgPerf', !!s.perf);
+    setToggle('tgMobile', !!s.mobile);
+    if (s.xhairStyle !== undefined) xhairStyle = s.xhairStyle;
+    if (s.xhairColor) xhairColor = s.xhairColor;
+    if (s.colorblind) applyColorblindMode(true);
+    if (s.mobile) toggleMobileControls(true);
+    if (s.nuke !== false) nukeEnabled = true; else nukeEnabled = false;
+    if (s.username) {
+      playerName = s.username;
+      const mu = document.getElementById('menuUsername');
+      if (mu) mu.value = playerName;
+    }
+  } catch(e){}
+}
+
+// ─── SEPARATE VOLUME CHANNELS ──────────────────────────────────
+let sfxGain = null;
+let musicVolMul = 1.0;
+let sfxVolMul = 1.0;
+
+function ensureSfxGain(){
+  if (!sfxGain) {
+    sfxGain = AC.createGain();
+    sfxGain.gain.value = sfxVolMul;
+    sfxGain.connect(AC.destination);
+  }
+  return sfxGain;
+}
+
+function updateMusicVolume(v){
+  musicVolMul = v / 100;
+  if (!musicMuted) {
+    masterGain.gain.setTargetAtTime(masterVol * musicVolMul, AC.currentTime, 0.1);
+  }
+  saveSettings();
+}
+
+function updateSfxVolume(v){
+  sfxVolMul = v / 100;
+  ensureSfxGain().gain.value = sfxVolMul;
+  saveSettings();
+}
+
+// Override updateVolume to also save
+const _origUpdateVolume = updateVolume;
+window.updateVolume = function(v){
+  _origUpdateVolume(v);
+  saveSettings();
+};
+
+// ─── CROSSHAIR SYSTEM ──────────────────────────────────────────
+let xhairStyle = 'cross'; // cross | dot | circle | T
+let xhairColor = '#ffffff';
+const XHAIR_COLORS = ['#ffffff','#39ff14','#ff3939','#3af','#f97316','#ffe000','#ff69b4'];
+const XHAIR_STYLES = ['cross','dot','circle','T'];
+
+function buildCrosshairPicker(){
+  const grid = document.getElementById('xhairGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  XHAIR_STYLES.forEach(style => {
+    const div = document.createElement('div');
+    div.className = 'xhair-opt' + (xhairStyle === style ? ' on' : '');
+    const cv = document.createElement('canvas');
+    cv.width = 36; cv.height = 36;
+    div.appendChild(cv);
+    drawXhairPreview(cv.getContext('2d'), style, '#aaccdd', 18, 18);
+    div.onclick = () => {
+      xhairStyle = style;
+      document.querySelectorAll('.xhair-opt').forEach(e=>e.classList.remove('on'));
+      div.classList.add('on');
+      renderCustomCrosshair();
+      saveSettings();
+    };
+    grid.appendChild(div);
+  });
+  const colorRow = document.getElementById('xhairColorRow');
+  if (!colorRow) return;
+  colorRow.innerHTML = '';
+  XHAIR_COLORS.forEach(col => {
+    const div = document.createElement('div');
+    div.className = 'color-swatch' + (xhairColor === col ? ' on' : '');
+    div.style.background = col;
+    div.onclick = () => {
+      xhairColor = col;
+      document.querySelectorAll('.color-swatch').forEach(e=>e.classList.remove('on'));
+      div.classList.add('on');
+      renderCustomCrosshair();
+      saveSettings();
+    };
+    colorRow.appendChild(div);
+  });
+}
+
+function drawXhairPreview(cx, style, color, x, y){
+  cx.strokeStyle = color; cx.fillStyle = color;
+  cx.lineWidth = 1.5;
+  if (style === 'cross'){
+    cx.beginPath(); cx.moveTo(x,y-8); cx.lineTo(x,y-3); cx.stroke();
+    cx.beginPath(); cx.moveTo(x,y+3); cx.lineTo(x,y+8); cx.stroke();
+    cx.beginPath(); cx.moveTo(x-8,y); cx.lineTo(x-3,y); cx.stroke();
+    cx.beginPath(); cx.moveTo(x+3,y); cx.lineTo(x+8,y); cx.stroke();
+    cx.beginPath(); cx.arc(x,y,1.5,0,Math.PI*2); cx.fill();
+  } else if (style === 'dot'){
+    cx.beginPath(); cx.arc(x,y,3,0,Math.PI*2); cx.fill();
+  } else if (style === 'circle'){
+    cx.beginPath(); cx.arc(x,y,7,0,Math.PI*2); cx.stroke();
+    cx.beginPath(); cx.arc(x,y,1.5,0,Math.PI*2); cx.fill();
+  } else if (style === 'T'){
+    cx.beginPath(); cx.moveTo(x,y+2); cx.lineTo(x,y+8); cx.stroke();
+    cx.beginPath(); cx.moveTo(x-7,y); cx.lineTo(x+7,y); cx.stroke();
+    cx.beginPath(); cx.arc(x,y,1.5,0,Math.PI*2); cx.fill();
+  }
+}
+
+function renderCustomCrosshair(){
+  const el = document.getElementById('hudCross');
+  if (!el) return;
+  // Replace SVG crosshair with canvas-based custom one
+  const spread = playerWeapon?.()?.def?.spread || 0.04;
+  const size = adsActive ? 14 : (18 + spread * 80);
+  el.style.width = size + 'px';
+  el.style.height = size + 'px';
+  // Tint all SVG lines
+  el.querySelectorAll('line,circle').forEach(ln => {
+    ln.setAttribute('stroke', xhairColor);
+    ln.setAttribute('fill', xhairColor);
+  });
+  // Show/hide elements based on style
+  const lines = el.querySelectorAll('line');
+  const dots = el.querySelectorAll('circle');
+  if (xhairStyle === 'dot'){
+    lines.forEach(l=>l.style.display='none');
+    dots.forEach(d=>{ d.style.display='block'; d.setAttribute('r','3'); });
+  } else if (xhairStyle === 'circle'){
+    lines.forEach(l=>l.style.display='none');
+    dots.forEach(d=>d.style.display='none');
+    // Draw circle on top via overlay div
+  } else {
+    lines.forEach(l=>l.style.display='block');
+    dots.forEach(d=>d.style.display='block');
+    if (xhairStyle === 'T'){
+      // Hide the bottom line (first vertical segment going down from center)
+      if (lines[0]) lines[0].style.display='none'; // top
+    }
+  }
+}
+
+// ─── COLORBLIND MODE ───────────────────────────────────────────
+function applyColorblindMode(on){
+  document.documentElement.style.setProperty('--cb-team0', on ? '#ffe000' : '#3af');
+  document.documentElement.style.setProperty('--cb-team1', on ? '#c040ff' : '#f44');
+  // Patch the team TDM ring colors used in drawSlime
+  window._cbMode = on;
+}
+
+// ─── PERFORMANCE MODE ──────────────────────────────────────────
+function isPerfMode(){ return document.getElementById('tgPerf')?.classList.contains('on'); }
+
+// ─── MOBILE TOUCH CONTROLS ─────────────────────────────────────
+let joystickActive = false;
+let joystickOrigin = {x:0,y:0};
+let joystickDelta = {x:0,y:0};
+const JOYSTICK_MAX = 50;
+
+function toggleMobileControls(on){
+  const tc = document.getElementById('touchControls');
+  if (tc) tc.classList.toggle('vis', on);
+}
+
+function initTouchControls(){
+  const jz = document.getElementById('joystickZone');
+  const knob = document.getElementById('joystickKnob');
+  const shootBtn = document.getElementById('touchShoot');
+  const reloadBtn = document.getElementById('touchReload');
+  const adsBtn = document.getElementById('touchADS');
+  if (!jz) return;
+
+  jz.addEventListener('touchstart', e=>{
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    const rect = jz.getBoundingClientRect();
+    joystickOrigin = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+    joystickActive = true;
+    updateJoystick(t.clientX, t.clientY, knob);
+  }, {passive:false});
+  jz.addEventListener('touchmove', e=>{
+    e.preventDefault();
+    if (!joystickActive) return;
+    updateJoystick(e.changedTouches[0].clientX, e.changedTouches[0].clientY, knob);
+  }, {passive:false});
+  jz.addEventListener('touchend', e=>{
+    e.preventDefault();
+    joystickActive = false;
+    joystickDelta = {x:0,y:0};
+    knob.style.transform = 'translate(0,0)';
+    keys['KeyW'] = keys['KeyS'] = keys['KeyA'] = keys['KeyD'] = false;
+  }, {passive:false});
+
+  if(shootBtn) shootBtn.addEventListener('touchstart', e=>{ e.preventDefault(); mouse.down=true; }, {passive:false});
+  if(shootBtn) shootBtn.addEventListener('touchend', e=>{ e.preventDefault(); mouse.down=false; }, {passive:false});
+  if(reloadBtn) reloadBtn.addEventListener('touchstart', e=>{ e.preventDefault(); startReload(); }, {passive:false});
+  if(adsBtn) adsBtn.addEventListener('touchstart', e=>{ e.preventDefault(); mouse.right=!mouse.right; }, {passive:false});
+}
+
+function updateJoystick(cx, cy, knob){
+  let dx = cx - joystickOrigin.x;
+  let dy = cy - joystickOrigin.y;
+  const dist = Math.hypot(dx,dy);
+  if (dist > JOYSTICK_MAX) { dx = dx/dist*JOYSTICK_MAX; dy = dy/dist*JOYSTICK_MAX; }
+  joystickDelta = {x: dx/JOYSTICK_MAX, y: dy/JOYSTICK_MAX};
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+  // Map to WASD
+  keys['KeyW'] = dy < -0.3;
+  keys['KeyS'] = dy > 0.3;
+  keys['KeyA'] = dx < -0.3;
+  keys['KeyD'] = dx > 0.3;
+}
+
+// ─── GUN GAME MODE ─────────────────────────────────────────────
+const GUN_GAME_ORDER = [8,13,3,1,0,11,15,16,19,9,2,10,20,21,12,5,7,14,6,4,18,17];
+let gunGameSlot = 0; // index into GUN_GAME_ORDER per player
+
+function isGunGame(){ return G.mode === 'gungame' || gameMode === 'gungame'; }
+
+function initGunGame(){
+  if (!isGunGame()) return;
+  gunGameSlot = 0;
+  const wid = GUN_GAME_ORDER[0];
+  G.player.inv = [makeSlot(wid),null,null,null,null];
+  G.player.slotIdx = 0;
+  document.getElementById('hudGunGame').style.display = 'block';
+  updateGunGameHUD();
+}
+
+function advanceGunGame(){
+  if (!isGunGame()) return;
+  gunGameSlot++;
+  if (gunGameSlot >= GUN_GAME_ORDER.length){
+    // This player won!
+    showNotif('🏆 YOU WON GUN GAME!', 5000);
+    G.gameOver = true;
+    G.winner = playerName;
+    showMVPCard(playerName, G.scores);
+    return;
+  }
+  const wid = GUN_GAME_ORDER[gunGameSlot];
+  G.player.inv = [makeSlot(wid),null,null,null,null];
+  G.player.slotIdx = 0;
+  showNotif(`🔫 NEXT: ${getWeaponDef(wid).name}`, 2000);
+  updateGunGameHUD();
+  if (currentRoomId) wsSend({type:'gungame_advance', slot: gunGameSlot, socketId: mySocketId});
+}
+
+function updateGunGameHUD(){
+  if (!isGunGame()) return;
+  const wid = GUN_GAME_ORDER[Math.min(gunGameSlot, GUN_GAME_ORDER.length-1)];
+  document.getElementById('ggWeaponName').textContent = `${getWeaponDef(wid).icon} ${getWeaponDef(wid).name}`;
+  document.getElementById('ggProgress').textContent = `WEAPON ${gunGameSlot+1}/${GUN_GAME_ORDER.length} · KILL TO ADVANCE`;
+}
+
+// Hook into dealDamage kill detection to advance gun game — patch kill path
+const _ggKillHook = (killer) => {
+  if (isGunGame() && killer?.isPlayer) advanceGunGame();
+};
+
+// ─── MVP CARD ──────────────────────────────────────────────────
+function showMVPCard(winnerName, scores){
+  document.getElementById('mvpWinnerName').textContent = `🏆 ${winnerName.toUpperCase()} WINS`;
+  const entries = Object.entries(scores).sort((a,b)=>b[1].k-a[1].k);
+  const topEntry = entries[0];
+  const topKiller = topEntry ? (topEntry[1].name || topEntry[0]) : '???';
+  const topKills = topEntry ? topEntry[1].k : 0;
+  const mostDeaths = entries.reduce((best,e)=>e[1].d>best[1].d?e:best, entries[0]||['?',{d:0}]);
+
+  document.getElementById('mvpTopKiller').textContent = topKiller.slice(0,12);
+  document.getElementById('mvpMostKills').textContent = topKills;
+  document.getElementById('mvpMostDeaths').textContent = mostDeaths?.[1]?.d || 0;
+
+  // Badges
+  const badges = [];
+  if (winnerName === playerName) badges.push('🏆 WINNER');
+  if (topKiller === playerName) badges.push('💀 TOP KILLER');
+  const myEntry = Object.values(scores).find(s=>s.name===playerName);
+  if (myEntry?.d === 0 && (myEntry?.k||0)>0) badges.push('🛡 UNTOUCHED');
+  document.getElementById('mvpBadges').innerHTML = badges.map(b=>`<span class="mvp-badge">${b}</span>`).join('');
+
+  // Score list
+  document.getElementById('mvpScoreList').innerHTML = entries.slice(0,8).map((e,i)=>{
+    const kd = e[1].d>0?(e[1].k/e[1].d).toFixed(1):'∞';
+    const nm = e[1].name||e[0].slice(0,12);
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(26,53,80,.3);color:${nm===playerName?'var(--orange)':'#8aacbc'};">
+      <span>#${i+1} ${nm}</span>
+      <span>${e[1].k}K / ${e[1].d}D <span style="color:#4a6a8a;font-size:9px;">${kd}KD</span></span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('mvpCard').classList.add('vis');
+  // Hide the old game over div
+  document.getElementById('hudGO').classList.remove('vis');
+}
+
+// ─── REMATCH VOTE ──────────────────────────────────────────────
+let rematchVotes = {yes:0, total:0};
+function castRematchVote(yes){
+  document.getElementById('rvYesBtn').disabled = true;
+  document.getElementById('rvYesBtn').textContent = '✓ VOTED';
+  if (currentRoomId) wsSend({type:'rematch_vote', yes});
+  else { exitToMenu(); }
+}
+function updateRematchVote(yes, total){
+  rematchVotes = {yes, total};
+  const el = document.getElementById('rematchVote');
+  if (!el) return;
+  el.classList.add('vis');
+  document.getElementById('rvCount').textContent = `${yes} / ${total} voted`;
+  document.getElementById('rvBarFill').style.width = total>0?`${(yes/total)*100}%`:'0%';
+}
+
+// ─── CROSSHAIR DRAW (for settings preview) ─────────────────────
+function initCrosshairPicker(){
+  if (document.getElementById('sSettings').classList.contains('active')) buildCrosshairPicker();
+}
+// Patch showScreen to build crosshair picker when settings is shown
+const _origShowScreen = showScreen;
+window.showScreen = function(id){
+  _origShowScreen(id);
+  if (id === 'sSettings') { buildCrosshairPicker(); }
+};
+
+// ─── HANDLE NEW SERVER MESSAGES ────────────────────────────────
+// Extend handleServerMsg for new message types
+const _origHandleServerMsg = handleServerMsg;
+function handleServerMsg(msg){
+  switch(msg.type){
+    case 'rematch_vote_update':
+      updateRematchVote(msg.yes, msg.total);
+      break;
+    case 'gungame_advance':
+      if (msg.socketId !== mySocketId && remotePlayers[msg.socketId])
+        remotePlayers[msg.socketId].ggSlot = msg.slot;
+      break;
+    case 'kick':
+      showNotif('⛔ YOU WERE KICKED FROM THE ROOM');
+      setTimeout(exitToMenu, 2000);
+      break;
+    default:
+      _origHandleServerMsg(msg);
+  }
+}
+
+// ─── PATCH showGameOver TO SHOW MVP CARD ───────────────────────
+function showGameOver(winnerName, scores){
+  showMVPCard(winnerName, scores || G.scores);
+  document.getElementById('rematchVote').classList.add('vis');
+  rematchVotes = {yes:0, total:Object.keys(scores||G.scores).length};
+  updateRematchVote(0, rematchVotes.total);
+}
+
+// ─── PATCH INIT ─────────────────────────────────────────────────
+// After startGameFromLobby, init gun game if needed
+const _origStartGameFromLobby = startGameFromLobby;
+window.startGameFromLobby = function(){
+  _origStartGameFromLobby();
+  document.getElementById('mvpCard').classList.remove('vis');
+  document.getElementById('rematchVote').classList.remove('vis');
+  document.getElementById('rvYesBtn').disabled = false;
+  document.getElementById('rvYesBtn').textContent = '✓ REMATCH';
+  document.getElementById('hudGunGame').style.display = 'none';
+  setTimeout(()=>{ initGunGame(); }, 100);
+};
+
+// ─── HOOK KILL EVENTS FOR GUN GAME ─────────────────────────────
+// The existing kill_confirmed handler in handleServerMsg triggers _ggKillHook
+const _origKillConfirmedHook = window.handleServerMsg;
+// Patch the kill_confirmed case of the original handler
+const __innerOrig = _origHandleServerMsg;
+// We re-wrap once more to inject gun game advance on kill_confirmed
+function handleServerMsg(msg){ // final override
+  if (msg.type === 'kill_confirmed' && isGunGame()) {
+    __innerOrig(msg);
+    advanceGunGame();
+    return;
+  }
+  switch(msg.type){
+    case 'rematch_vote_update':
+      updateRematchVote(msg.yes, msg.total);
+      break;
+    case 'gungame_advance':
+      if (msg.socketId !== mySocketId && remotePlayers[msg.socketId])
+        remotePlayers[msg.socketId].ggSlot = msg.slot;
+      break;
+    case 'kick':
+      showNotif('⛔ YOU WERE KICKED FROM THE ROOM');
+      setTimeout(exitToMenu, 2000);
+      break;
+    default:
+      __innerOrig(msg);
+  }
+}
+
+// Also hook NPC kill path (offline gun game)
+const _origDealDamage = window.dealDamage;
+// We can't easily patch dealDamage here since it may not be defined yet — 
+// instead patch the kill_confirmed branch via keydown hook:
+// For offline: hook into existing NPC kill detection via the G.scores update path.
+// We watch G.player.kills changes in the game loop:
+let _ggLastKills = 0;
+const _origGameLoop = window.gameLoop;
+window.gameLoop = function(ts){
+  _origGameLoop(ts);
+  if (isGunGame() && G.player && !currentRoomId){
+    if (G.player.kills > _ggLastKills){
+      _ggLastKills = G.player.kills;
+      advanceGunGame();
+    }
+  }
+};
+
+// ─── ? KEY HANDLER FOR HOTKEYS ─────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === '?' && document.getElementById('sGame').classList.contains('active')){
+    document.getElementById('hotkeyOverlay').classList.toggle('vis');
+  }
+}, true);
+
+// ─── INIT NEW FEATURES ─────────────────────────────────────────
+initTouchControls();
+loadSettings();
 
 // ─── INIT ──────────────────────────────────────────────────────
 initServers();
