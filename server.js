@@ -26,13 +26,15 @@ const rooms   = new Map();   // roomId  → Room
 const players = new Map();   // ws      → Player
 
 // ─── Room factory ──────────────────────────────────────────────────
-function createRoom(name, mode) {
+function createRoom(name, mode, map) {
   const id = uuidv4().slice(0, 8).toUpperCase();
   const validMode = ['ffa','tdm','gungame'].includes(mode) ? mode : 'ffa';
+  const validMap  = ['city','forest'].includes(map) ? map : 'city';
   const room = {
     id,
     name      : name || `SLIME-${id}`,
     mode      : validMode,
+    map       : validMap,
     state     : 'lobby',        // lobby | ingame | gameover
     players   : new Map(),      // socketId → roomPlayer
     scores    : {},
@@ -125,7 +127,6 @@ function ensurePublicRooms() {
     createRoom('SLIMEVILLE', 'ffa');
     createRoom('GOO CANYON',  'tdm');
     createRoom('GUN GAME ARENA', 'gungame');
-    createRoom('FOREST ARENA', 'ffa');
   }
 }
 ensurePublicRooms();
@@ -180,7 +181,7 @@ function handleMessage(ws, msg) {
       break;
 
     case 'create_room': {
-      const room = createRoom(msg.name, msg.mode);
+      const room = createRoom(msg.name, msg.mode, msg.map);
       room.hostId = player.socketId;
       joinRoom(ws, room.id, msg.playerInfo);
       break;
@@ -491,19 +492,6 @@ function handleMessage(ws, msg) {
       break;
     }
 
-    // ── In-game: smoke grenade relay ─────────────────────────────
-    case 'smoke_cloud': {
-      const room = getPlayerRoom(player);
-      if (!room || room.state !== 'ingame') break;
-      broadcast(room, {
-        type: 'smoke_cloud',
-        socketId: player.socketId,
-        x: msg.x,
-        y: msg.y,
-      }, ws);
-      break;
-    }
-
     // ── In-game: weapon pickup sync ───────────────────────────────
     // Client sends: { type:'weapon_pickup', spawnIdx }
     case 'weapon_pickup': {
@@ -578,6 +566,42 @@ function handleMessage(ws, msg) {
       break;
     }
 
+    // ── Smoke cloud relay ────────────────────────────────────────
+    case 'smoke_cloud': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type    : 'smoke_cloud',
+        socketId: player.socketId,
+        x       : msg.x,
+        y       : msg.y,
+      }, ws);
+      break;
+    }
+
+    // ── Taunt relay ───────────────────────────────────────────────
+    case 'taunt': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type    : 'taunt',
+        socketId: player.socketId,
+        emoji   : String(msg.emoji || '💀').slice(0, 4),
+      }, ws);
+      break;
+    }
+
+    // ── Speed-pad trigger (informational relay) ───────────────────
+    case 'speed_boost': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type    : 'speed_boost',
+        socketId: player.socketId,
+      }, ws);
+      break;
+    }
+
     default:
       break;
   }
@@ -635,6 +659,7 @@ function joinRoom(ws, roomId, info = {}) {
     roomId     : room.id,
     roomName   : room.name,
     mode       : room.mode,
+    map        : room.map,
     state      : room.state,
     locked     : !!room.locked,
     socketId   : player.socketId,
@@ -650,7 +675,7 @@ function joinRoom(ws, roomId, info = {}) {
 
   // Mid-game join: send game_start so the client starts immediately
   if (room.state === 'ingame') {
-    send(ws, { type: 'game_start', mode: room.mode, scoreLimit: room.scoreLimit, scores: room.scores });
+    send(ws, { type: 'game_start', mode: room.mode, map: room.map, scoreLimit: room.scoreLimit, scores: room.scores });
   }
 }
 
@@ -664,21 +689,6 @@ function leaveRoom(ws) {
   room.players.delete(player.socketId);
   delete room.scores[player.socketId];
 
-  // ── Cancel countdown if one was running ───────────────────────
-  if (room.players.size === 0 && room.startTimer) {
-    clearInterval(room.startTimer);
-    room.startTimer = null;
-  }
-
-  // ── All players left ───────────────────────────────────────────
-  if (room.players.size === 0) {
-    // Delete non-public rooms immediately; public ones are recreated
-    // by ensurePublicRooms() on the next minute tick.
-    rooms.delete(room.id);
-    return;
-  }
-
-  // ── Some players remain — notify them who left ─────────────────
   broadcast(room, {
     type    : 'player_left',
     socketId: player.socketId,
@@ -686,25 +696,9 @@ function leaveRoom(ws) {
     players : getLobbyPlayers(room),
   });
 
-  // ── If the room was locked (in-game) unlock it so others can join
-  if (room.locked && room.state === 'ingame') {
-    room.state  = 'lobby';
-    room.locked = false;
-    room.scores = {};
-    room.players.forEach((p, sid) => {
-      p.ready = false; p.kills = 0; p.deaths = 0;
-      p.hp = 100; p.armor = 0; p.dead = false;
-      room.scores[sid] = { k: 0, d: 0, score: 0, name: p.name };
-    });
-
-    // Reassign host if the host was the one who left
-    if (!room.players.has(room.hostId)) {
-      room.hostId = room.players.keys().next().value || null;
-    }
-
-    // Tell remaining clients the room is now open again
-    broadcast(room, { type: 'room_unlocked', roomId: room.id });
-    broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room) });
+  if (room.players.size === 0 && room.startTimer) {
+    clearInterval(room.startTimer);
+    room.startTimer = null;
   }
 }
 
@@ -749,6 +743,7 @@ function startGame(room) {
   broadcast(room, {
     type      : 'game_start',
     mode      : room.mode,
+    map       : room.map,
     scoreLimit: room.scoreLimit,
     scores    : room.scores,
     players   : getLobbyPlayers(room),
