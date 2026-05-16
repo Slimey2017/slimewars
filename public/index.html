@@ -780,6 +780,22 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       </div>
     </div>
 
+    <!-- Private Room toggle -->
+    <div>
+      <div class="crm-lbl">Room Privacy</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+        <div class="toggle" id="crmPrivateToggle" onclick="crmTogglePrivate(this)" title="Make room private (invite-only)"></div>
+        <span id="crmPrivateLabel" style="font-size:11px;color:#6a8aaa;letter-spacing:1px;">PUBLIC — anyone can join</span>
+      </div>
+    </div>
+
+    <!-- Password field (shown only when private is on) -->
+    <div id="crmPasswordRow" style="display:none;">
+      <div class="crm-lbl">Room Password <span style="color:#3a5a7a;">(optional)</span></div>
+      <input class="crm-input" id="crmPassword" placeholder="Leave blank for invite-only (no password)" maxlength="32">
+      <div style="font-size:9px;color:#3a6a8a;letter-spacing:1px;margin-top:4px;">Share the Room ID + password with friends to let them join</div>
+    </div>
+
     <div class="crm-actions">
       <button class="btn" onclick="crmSubmit()">▶ CREATE &amp; ENTER</button>
       <button class="btn red" onclick="document.getElementById('createRoomModal').classList.remove('vis')">✕ CANCEL</button>
@@ -1143,11 +1159,14 @@ function renderServerRows(rooms){
     const pc = ping < 60 ? 'p-good' : ping < 120 ? 'p-ok' : 'p-bad';
     const full = r.players >= r.max;
     const locked = !!r.locked;
-    const cantJoin = full || locked;
+    const isPrivate = !!r.isPrivate;
+    const cantJoin = full || (locked && !isPrivate);   // private rooms: show but can't browse-join
     const rowClick = cantJoin ? '' : `onclick="joinRealRoom('${r.id}')"`;
-    const rowStyle = locked ? ' style="opacity:0.5;cursor:default;"' : '';
-    const stateLabel = locked ? '🔴 IN GAME' : r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY';
-    const btnLabel = full ? 'FULL' : locked ? 'LOCKED' : 'JOIN';
+    const rowStyle = (locked && !isPrivate) ? ' style="opacity:0.5;cursor:default;"' : '';
+    const stateLabel = (locked && !isPrivate) ? '🔴 IN GAME'
+                     : isPrivate              ? '🔒 PRIVATE'
+                     : r.state === 'ingame'   ? '🟢 IN GAME' : '🟡 LOBBY';
+    const btnLabel = full ? 'FULL' : (locked && !isPrivate) ? 'LOCKED' : isPrivate ? '🔒 PRIVATE' : 'JOIN';
     return `<tr class="srv-row" ${rowClick}${rowStyle}>
       <td><span class="srv-name">${r.name}</span></td>
       <td style="color:#5a8a6a;">${stateLabel}</td>
@@ -1210,13 +1229,25 @@ function updateWsStatus(){
 }
 
 // Create a new named room — now uses the proper modal
+let _crmPrivate = false;
+function crmTogglePrivate(el) {
+  _crmPrivate = !_crmPrivate;
+  el.classList.toggle('on', _crmPrivate);
+  document.getElementById('crmPrivateLabel').textContent =
+    _crmPrivate ? '🔒 PRIVATE — invite-only' : 'PUBLIC — anyone can join';
+  document.getElementById('crmPasswordRow').style.display = _crmPrivate ? '' : 'none';
+}
 function createNewRoom(){
   if(!wsConnected){ showNotif('⚠️ Not connected to server'); return; }
-  _crmMode='ffa'; _crmMap='city';
+  _crmMode='ffa'; _crmMap='city'; _crmPrivate=false;
   // Reset pills
   document.querySelectorAll('#crmModeGroup .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='ffa'));
   document.querySelectorAll('#crmMapGroup  .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='city'));
   document.getElementById('crmName').value='';
+  document.getElementById('crmPassword').value='';
+  document.getElementById('crmPrivateToggle').classList.remove('on');
+  document.getElementById('crmPrivateLabel').textContent='PUBLIC — anyone can join';
+  document.getElementById('crmPasswordRow').style.display='none';
   document.getElementById('createRoomModal').classList.add('vis');
 }
 function crmPick(type, el){
@@ -1227,9 +1258,11 @@ function crmPick(type, el){
   else              _crmMap =el.dataset.val;
 }
 function crmSubmit(){
-  const name = document.getElementById('crmName').value.trim();
+  const name     = document.getElementById('crmName').value.trim();
+  const password = _crmPrivate ? document.getElementById('crmPassword').value.trim() : '';
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  selectedServer = { isReal:true, creating:true, name, mode:_crmMode, map:_crmMap };
+  selectedServer = { isReal:true, creating:true, name, mode:_crmMode, map:_crmMap,
+                     locked:_crmPrivate, password };
   document.getElementById('createRoomModal').classList.remove('vis');
   showScreen('sStreakSelect');
 }
@@ -1248,10 +1281,12 @@ window.confirmJoinReal = function(){
   }
   if(selectedServer && selectedServer.isReal && selectedServer.creating){
     wsSend({
-      type: 'create_room',
-      name: selectedServer.name,
-      mode: selectedServer.mode,
-      map:  selectedServer.map || 'city',
+      type    : 'create_room',
+      name    : selectedServer.name,
+      mode    : selectedServer.mode,
+      map     : selectedServer.map || 'city',
+      locked  : !!selectedServer.locked,
+      password: selectedServer.password || '',
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
