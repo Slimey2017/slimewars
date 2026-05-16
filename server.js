@@ -85,6 +85,7 @@ function getRoomList() {
         max        : MAX_ROOM_PLAYERS,
         state      : r.state,
         locked     : !!r.locked,
+        isPrivate  : !!r.isPrivate,
         ping       : Math.floor(Math.random() * 40) + 5,
       });
     }
@@ -183,6 +184,12 @@ function handleMessage(ws, msg) {
     case 'create_room': {
       const room = createRoom(msg.name, msg.mode, msg.map);
       room.hostId = player.socketId;
+      // Private / locked room: only the host (and invited players) can join
+      if (msg.locked) {
+        room.locked    = true;
+        room.password  = msg.password ? String(msg.password).slice(0, 32) : null;
+        room.isPrivate = true;   // stays locked even in lobby (not just in-game)
+      }
       joinRoom(ws, room.id, msg.playerInfo);
       break;
     }
@@ -617,7 +624,14 @@ function joinRoom(ws, roomId, info = {}) {
   if (!room)                                 return send(ws, { type: 'error', msg: 'Room not found' });
   if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
   if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
-  if (room.state === 'ingame' && room.locked) return send(ws, { type: 'error', msg: 'Room is locked — game in progress' });
+  if (room.state === 'ingame' && room.locked && !room.isPrivate) return send(ws, { type: 'error', msg: 'Room is locked — game in progress' });
+  // Private rooms: block all joins unless correct password supplied (host is already inside)
+  if (room.isPrivate && player.socketId !== room.hostId) {
+    if (room.password && (info || {}).password !== room.password)
+      return send(ws, { type: 'error', msg: 'Wrong password — room is private' });
+    if (!room.password)
+      return send(ws, { type: 'error', msg: 'Room is private — invite only' });
+  }
   applyPlayerInfo(player, info || {});
   player.roomId = roomId;
   player.ready  = false;
@@ -788,7 +802,7 @@ function endGame(room, winnerName, winnerSocketId) {
       rooms.delete(room.id);
     } else {
       room.state  = 'lobby';
-      room.locked = false;  // unlock for rematch
+      room.locked = !!room.isPrivate;   // private rooms stay locked; public rooms unlock for rematch
       room.scores = {};
       room.rematchVotes = new Set();
       room.players.forEach((p, sid) => {
