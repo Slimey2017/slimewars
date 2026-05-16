@@ -663,6 +663,7 @@ function joinRoom(ws, roomId, info = {}) {
     state      : room.state,
     locked     : !!room.locked,
     socketId   : player.socketId,
+    hostId     : room.hostId,
     players    : getLobbyPlayers(room),
     scores     : room.scores,
   });
