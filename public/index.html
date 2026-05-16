@@ -410,15 +410,46 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- SERVER BROWSER -->
 <div id="sBrowser" class="screen">
-  <div style="padding:28px;display:flex;flex-direction:column;gap:12px;width:100%;">
+  <div style="padding:28px;display:flex;flex-direction:column;gap:12px;width:100%;height:100%;box-sizing:border-box;">
     <div class="screen-hdr">
       <div class="screen-title">SERVER BROWSER</div>
       <div id="wsStatus" style="font-size:10px;padding:3px 8px;border-radius:2px;border:1px solid #1a3050;color:#4a7a9a;">● CONNECTING</div>
       <div style="margin-left:auto;font-size:11px;color:#3a6a8a;" id="onlineCount"></div>
       <button class="btn sm" onclick="populateServers()">↻ REFRESH</button>
-      <button class="btn sm" onclick="createNewRoom()">+ CREATE ROOM</button>
+      <button class="btn sm" id="createRoomToggleBtn" onclick="toggleCreatePanel()">+ CREATE ROOM</button>
       <button class="btn sm" onclick="showScreen('sMenu')">← BACK</button>
     </div>
+
+    <!-- Inline create room panel -->
+    <div id="createRoomPanel" style="display:none;background:rgba(5,15,35,.95);border:1px solid var(--orange);border-radius:4px;padding:18px 22px;display:none;flex-direction:column;gap:12px;">
+      <div style="font-family:'Orbitron';font-size:15px;color:var(--orange);letter-spacing:3px;">⚙ CREATE ROOM</div>
+      <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <div class="crm-lbl">Room Name (optional)</div>
+          <input class="crm-input" id="crmName" placeholder="Leave blank for auto-name" maxlength="28" style="width:220px;">
+        </div>
+        <div>
+          <div class="crm-lbl">Game Mode</div>
+          <div class="crm-group" id="crmModeGroup">
+            <button class="crm-pill on" data-val="ffa"    onclick="crmPick('mode',this)">⚔️ FFA</button>
+            <button class="crm-pill"   data-val="tdm"     onclick="crmPick('mode',this)">🛡️ TDM</button>
+            <button class="crm-pill"   data-val="gungame" onclick="crmPick('mode',this)">🔫 GUN GAME</button>
+          </div>
+        </div>
+        <div>
+          <div class="crm-lbl">Map</div>
+          <div class="crm-group" id="crmMapGroup">
+            <button class="crm-pill on" data-val="city"   onclick="crmPick('map',this)">🏙️ CITY</button>
+            <button class="crm-pill"    data-val="forest" onclick="crmPick('map',this)">🌲 FOREST</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" onclick="crmSubmit()">▶ CREATE &amp; ENTER</button>
+          <button class="btn red" onclick="toggleCreatePanel()">✕ CANCEL</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Filter bar -->
     <div class="srv-filter">
       <span class="filter-lbl">MODE:</span>
@@ -753,39 +784,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 </div>
 
 
-<!-- CREATE ROOM MODAL -->
-<div id="createRoomModal">
-  <div class="crm-box">
-    <div class="crm-title">⚙ CREATE ROOM</div>
-
-    <div>
-      <div class="crm-lbl">Room Name (optional)</div>
-      <input class="crm-input" id="crmName" placeholder="Leave blank for auto-name" maxlength="28">
-    </div>
-
-    <div>
-      <div class="crm-lbl">Game Mode</div>
-      <div class="crm-group" id="crmModeGroup">
-        <button class="crm-pill on" data-val="ffa"     onclick="crmPick('mode',this)">⚔️ FREE FOR ALL</button>
-        <button class="crm-pill"   data-val="tdm"      onclick="crmPick('mode',this)">🛡️ TEAM DEATHMATCH</button>
-        <button class="crm-pill"   data-val="gungame"  onclick="crmPick('mode',this)">🔫 GUN GAME</button>
-      </div>
-    </div>
-
-    <div>
-      <div class="crm-lbl">Map</div>
-      <div class="crm-group" id="crmMapGroup">
-        <button class="crm-pill on" data-val="city"   onclick="crmPick('map',this)">🏙️ CITY</button>
-        <button class="crm-pill"    data-val="forest" onclick="crmPick('map',this)">🌲 FOREST</button>
-      </div>
-    </div>
-
-    <div class="crm-actions">
-      <button class="btn" onclick="crmSubmit()">▶ CREATE &amp; ENTER</button>
-      <button class="btn red" onclick="document.getElementById('createRoomModal').classList.remove('vis')">✕ CANCEL</button>
-    </div>
-  </div>
-</div>
 
 
 <script>
@@ -1209,15 +1207,26 @@ function updateWsStatus(){
   else { el.textContent='● OFFLINE'; el.style.color='#f44'; el.style.borderColor='#4a1a1a'; }
 }
 
-// Create a new named room — now uses the proper modal
-function createNewRoom(){
-  _crmMode='ffa'; _crmMap='city';
-  // Reset pills
-  document.querySelectorAll('#crmModeGroup .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='ffa'));
-  document.querySelectorAll('#crmMapGroup  .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='city'));
-  document.getElementById('crmName').value='';
-  document.getElementById('createRoomModal').classList.add('vis');
+// Create a new named room — inline panel inside server browser
+function toggleCreatePanel(){
+  const panel = document.getElementById('createRoomPanel');
+  const btn   = document.getElementById('createRoomToggleBtn');
+  const open  = panel.style.display === 'flex';
+  if (open) {
+    panel.style.display = 'none';
+    btn.textContent = '+ CREATE ROOM';
+  } else {
+    // Reset fields
+    _crmMode = 'ffa'; _crmMap = 'city';
+    document.querySelectorAll('#crmModeGroup .crm-pill').forEach(p=>p.classList.toggle('on', p.dataset.val==='ffa'));
+    document.querySelectorAll('#crmMapGroup  .crm-pill').forEach(p=>p.classList.toggle('on', p.dataset.val==='city'));
+    document.getElementById('crmName').value = '';
+    panel.style.display = 'flex';
+    btn.textContent = '✕ CANCEL';
+  }
 }
+// Keep createNewRoom as alias in case anything else calls it
+function createNewRoom(){ toggleCreatePanel(); }
 function crmPick(type, el){
   const group = type==='mode'?'crmModeGroup':'crmMapGroup';
   document.querySelectorAll(`#${group} .crm-pill`).forEach(p=>p.classList.remove('on'));
@@ -1226,14 +1235,13 @@ function crmPick(type, el){
   else              _crmMap =el.dataset.val;
 }
 function crmSubmit(){
-  if(!wsConnected){
-    alert('Not connected to server yet — please wait a moment and try again.');
-    return;
-  }
+  if(!wsConnected){ showNotif('⚠️ Not connected to server'); return; }
   const name = document.getElementById('crmName').value.trim();
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
   selectedServer = { isReal:true, creating:true, name, mode:_crmMode, map:_crmMap };
-  document.getElementById('createRoomModal').classList.remove('vis');
+  // Close the panel
+  document.getElementById('createRoomPanel').style.display = 'none';
+  document.getElementById('createRoomToggleBtn').textContent = '+ CREATE ROOM';
   showScreen('sStreakSelect');
 }
 
@@ -3586,6 +3594,11 @@ function gchatKey(e){
 function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  // Always collapse the create room panel when leaving the browser
+  const panel = document.getElementById('createRoomPanel');
+  const btn   = document.getElementById('createRoomToggleBtn');
+  if(panel){ panel.style.display='none'; }
+  if(btn)  { btn.textContent='+ CREATE ROOM'; }
   if(id==='sBrowser') populateServers();
   if(id==='sSkins') buildSkins();
   if(id==='sMenu'){ drawMenuSlime(); if(!MUS.isMenuRunning()) MUS.startMenu(); }
