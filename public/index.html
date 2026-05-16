@@ -477,6 +477,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <span id="lobbyUsernameDisplay" style="color:#7ad;font-family:'Share Tech Mono';font-size:13px;letter-spacing:1px;">SlimeyPlayer</span>
     </div>
     <span class="plcount" id="readyCount">0/0 ready</span>
+    <button class="btn sm" id="forceStartBtn" onclick="forceStart()" style="display:none;border-color:#f97316;color:#f97316;">▶ FORCE START</button>
     <button class="btn" id="readyBtn" onclick="toggleReady()">READY UP</button>
   </div>
 </div>
@@ -851,13 +852,26 @@ function handleServerMsg(msg) {
     case 'joined_room':
       currentRoomId = msg.roomId;
       currentPendingMap = msg.map || 'city';
+      mySocketId = msg.socketId || mySocketId;
+      // Navigate to lobby now that server has confirmed
+      if (!document.getElementById('sLobby').classList.contains('active'))
+        showScreen('sLobby');
+      if (lobbyInterval) { clearInterval(lobbyInterval); lobbyInterval = null; }
       document.getElementById('chatMsgs').innerHTML = '';
       document.getElementById('lobbyName').textContent = msg.roomName;
       document.getElementById('lobbyInfo').textContent =
         `${msg.mode.toUpperCase()} · ${msg.players.length} players`;
+      const disp = document.getElementById('lobbyUsernameDisplay');
+      if (disp) disp.textContent = playerName;
+      isReady = false;
+      document.getElementById('readyBtn').textContent = 'READY UP';
+      document.getElementById('readyBtn').style.borderColor = '';
       lockLobbyMode(msg.mode);
       renderRealLobbyPlayers(msg.players);
       addLobbyMsg('SERVER', `Joined ${msg.roomName} · Mode: ${msg.mode.toUpperCase()}`);
+      // Show Force Start button only for the room host
+      { const fsBtn = document.getElementById('forceStartBtn');
+        if (fsBtn) fsBtn.style.display = msg.hostId === mySocketId ? '' : 'none'; }
       if (msg.state === 'ingame') startGameFromLobby();
       break;
 
@@ -1047,6 +1061,10 @@ function handleServerMsg(msg) {
       showScreen('sLobby');
       renderRealLobbyPlayers(msg.players);
       addLobbyMsg('SERVER', 'Rematch! Press READY UP to play again.');
+      isReady = false;
+      document.getElementById('readyBtn').textContent = 'READY UP';
+      document.getElementById('readyBtn').style.borderColor = '';
+      if (msg.mode) lockLobbyMode(msg.mode);
       break;
 
     case 'room_unlocked':
@@ -1225,14 +1243,7 @@ window.confirmJoinReal = function(){
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
-    showScreen('sLobby');
-    if(lobbyInterval){ clearInterval(lobbyInterval); lobbyInterval = null; }
-    const disp = document.getElementById('lobbyUsernameDisplay');
-    if(disp) disp.textContent = playerName;
-    document.getElementById('chatMsgs').innerHTML = '';
-    isReady = false;
-    document.getElementById('readyBtn').textContent = 'READY UP';
-    document.getElementById('readyBtn').style.borderColor = '';
+    // lobby screen shown when server confirms via joined_room
     return;
   }
   if(selectedServer && selectedServer.isReal && selectedServer.creating){
@@ -1244,15 +1255,7 @@ window.confirmJoinReal = function(){
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
-    showScreen('sLobby');
-    if(lobbyInterval){ clearInterval(lobbyInterval); lobbyInterval = null; }
-    const disp = document.getElementById('lobbyUsernameDisplay');
-    if(disp) disp.textContent = playerName;
-    document.getElementById('chatMsgs').innerHTML = '';
-    isReady = false;
-    document.getElementById('readyBtn').textContent = 'READY UP';
-    document.getElementById('readyBtn').style.borderColor = '';
-    lockLobbyMode(selectedServer.mode);
+    // lobby screen shown when server confirms via joined_room
     return;
   }
   _origConfirmJoinReal();
@@ -3743,6 +3746,9 @@ function toggleReady(){
   if(currentRoomId){ wsSend({type:'set_ready',ready:isReady}); }
   else renderLobbyPlayers();
 }
+function forceStart(){
+  if(currentRoomId) wsSend({type:'force_start'});
+}
 function setMode(m){
   gameMode=m; G.mode=m;
   document.getElementById('btnFFA').classList.toggle('on',m==='ffa');
@@ -3756,10 +3762,15 @@ function lockLobbyMode(m){
   // Remove any leftover onclick and make them non-interactive
   ffa.onclick=null; tdm.onclick=null;
   ffa.style.cursor='default'; tdm.style.cursor='default';
-  ffa.style.opacity= m==='ffa' ? '1' : '0.28';
-  tdm.style.opacity= m==='tdm' ? '1' : '0.28';
   ffa.title='Mode is locked — set at room creation';
   tdm.title='Mode is locked — set at room creation';
+  if(m==='gungame'){
+    ffa.style.opacity='0.28'; tdm.style.opacity='0.28';
+    ffa.classList.remove('on'); tdm.classList.remove('on');
+    return;
+  }
+  ffa.style.opacity= m==='ffa' ? '1' : '0.28';
+  tdm.style.opacity= m==='tdm' ? '1' : '0.28';
   // Small lock badge on active button
   const active = m==='ffa' ? ffa : tdm;
   if(!active.querySelector('.mode-lock-icon')){
