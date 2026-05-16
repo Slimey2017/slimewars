@@ -357,6 +357,27 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 /* ── Separate SFX / Music volume rows ─────────────────── */
 .vol-sub-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0 4px 12px;border-bottom:1px solid rgba(26,53,80,.2);}
 .vol-sub-lbl{font-size:11px;color:#4a7a8a;}
+
+/* ── Create-Room Modal ─────────────────────────────────── */
+#createRoomModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);align-items:center;justify-content:center;z-index:800;}
+#createRoomModal.vis{display:flex;}
+.crm-box{background:linear-gradient(160deg,#0d1e38,#0a1520);border:2px solid var(--orange);border-radius:8px;padding:36px 44px;min-width:420px;display:flex;flex-direction:column;gap:16px;}
+.crm-title{font-family:'Orbitron';font-size:20px;color:var(--orange);letter-spacing:3px;margin-bottom:4px;}
+.crm-lbl{font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:5px;}
+.crm-input{width:100%;padding:8px 10px;background:rgba(0,0,0,.5);border:1px solid #1e3a5a;border-bottom-color:#3af;color:#7ad;font-family:'Share Tech Mono';font-size:13px;outline:none;}
+.crm-group{display:flex;gap:8px;flex-wrap:wrap;}
+.crm-pill{padding:6px 16px;background:rgba(0,0,0,.4);border:1px solid #2a4060;color:#6a8aaa;font-family:'Share Tech Mono';font-size:11px;cursor:pointer;letter-spacing:1px;border-radius:3px;transition:.12s;}
+.crm-pill:hover{border-color:#5a8aaa;color:#aac;}
+.crm-pill.on{border-color:var(--orange);color:var(--orange);background:rgba(249,115,22,.12);}
+.crm-actions{display:flex;gap:10px;margin-top:4px;}
+
+/* ── Taunt bubble ──────────────────────────────────────── */
+.taunt-bubble{position:absolute;pointer-events:none;font-size:22px;animation:tauntPop .25s ease-out,tauntFade 1.8s 0.4s forwards;transform-origin:bottom center;}
+@keyframes tauntPop{0%{transform:scale(0) translateY(0)}80%{transform:scale(1.25) translateY(-6px)}100%{transform:scale(1) translateY(0)}}
+@keyframes tauntFade{0%{opacity:1}100%{opacity:0}}
+
+/* ── Speed-pad ─────────────────────────────────────────── */
+.speed-notif{color:#ffe000;}
 </style>
 </head>
 <body>
@@ -683,6 +704,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="hk-row"><span class="hk-key">ESC</span><span class="hk-desc">Main Menu</span></div>
         <div class="hk-row"><span class="hk-key">?</span><span class="hk-desc">This screen</span></div>
         <div class="hk-row"><span class="hk-key">SCROLL</span><span class="hk-desc">Switch weapon</span></div>
+        <div class="hk-row"><span class="hk-key">Z</span><span class="hk-desc">Taunt!</span></div>
       </div>
       <div class="hk-close"><button class="btn sm" onclick="document.getElementById('hotkeyOverlay').classList.remove('vis')">CLOSE</button></div>
     </div>
@@ -725,6 +747,41 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="mvp-actions">
       <button class="btn" id="mvpRematch" onclick="castRematchVote(true)">↺ REMATCH</button>
       <button class="btn" onclick="exitToMenu()">← MAIN MENU</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- CREATE ROOM MODAL -->
+<div id="createRoomModal">
+  <div class="crm-box">
+    <div class="crm-title">⚙ CREATE ROOM</div>
+
+    <div>
+      <div class="crm-lbl">Room Name (optional)</div>
+      <input class="crm-input" id="crmName" placeholder="Leave blank for auto-name" maxlength="28">
+    </div>
+
+    <div>
+      <div class="crm-lbl">Game Mode</div>
+      <div class="crm-group" id="crmModeGroup">
+        <button class="crm-pill on" data-val="ffa"     onclick="crmPick('mode',this)">⚔️ FREE FOR ALL</button>
+        <button class="crm-pill"   data-val="tdm"      onclick="crmPick('mode',this)">🛡️ TEAM DEATHMATCH</button>
+        <button class="crm-pill"   data-val="gungame"  onclick="crmPick('mode',this)">🔫 GUN GAME</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="crm-lbl">Map</div>
+      <div class="crm-group" id="crmMapGroup">
+        <button class="crm-pill on" data-val="city"   onclick="crmPick('map',this)">🏙️ CITY</button>
+        <button class="crm-pill"    data-val="forest" onclick="crmPick('map',this)">🌲 FOREST</button>
+      </div>
+    </div>
+
+    <div class="crm-actions">
+      <button class="btn" onclick="crmSubmit()">▶ CREATE &amp; ENTER</button>
+      <button class="btn red" onclick="document.getElementById('createRoomModal').classList.remove('vis')">✕ CANCEL</button>
     </div>
   </div>
 </div>
@@ -793,6 +850,7 @@ function handleServerMsg(msg) {
 
     case 'joined_room':
       currentRoomId = msg.roomId;
+      currentPendingMap = msg.map || 'city';
       document.getElementById('chatMsgs').innerHTML = '';
       document.getElementById('lobbyName').textContent = msg.roomName;
       document.getElementById('lobbyInfo').textContent =
@@ -836,6 +894,7 @@ function handleServerMsg(msg) {
     case 'game_start':
       setMode(msg.mode);
       if (msg.scoreLimit) G.scoreLimit = msg.scoreLimit;
+      if (msg.map) currentPendingMap = msg.map;
       startGameFromLobby();
       break;
 
@@ -996,6 +1055,16 @@ function handleServerMsg(msg) {
       showNotif('🔓 Server unlocked — all players left');
       break;
 
+    case 'taunt':
+      if (msg.socketId !== mySocketId) {
+        remoteTaunts[msg.socketId] = { emoji: msg.emoji, t: 2.5 };
+      }
+      break;
+
+    case 'speed_boost':
+      // visual only on remote — no local effect needed
+      break;
+
     case 'pong':
       latency = Date.now() - msg.ts;
       break;
@@ -1122,15 +1191,28 @@ function updateWsStatus(){
   else { el.textContent='● OFFLINE'; el.style.color='#f44'; el.style.borderColor='#4a1a1a'; }
 }
 
-// Create a new named room
+// Create a new named room — now uses the proper modal
 function createNewRoom(){
   if(!wsConnected){ showNotif('⚠️ Not connected to server'); return; }
-  const name = prompt('Room name (leave blank for auto):', '') || '';
-  const modeChoice = prompt('Game mode:\n1 = Free For All\n2 = Team Deathmatch\n3 = Gun Game', '1');
-  const modeMap = {'1':'ffa','2':'tdm','3':'gungame'};
-  const mode = modeMap[modeChoice] || 'ffa';
+  _crmMode='ffa'; _crmMap='city';
+  // Reset pills
+  document.querySelectorAll('#crmModeGroup .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='ffa'));
+  document.querySelectorAll('#crmMapGroup  .crm-pill').forEach(p=>p.classList.toggle('on',p.dataset.val==='city'));
+  document.getElementById('crmName').value='';
+  document.getElementById('createRoomModal').classList.add('vis');
+}
+function crmPick(type, el){
+  const group = type==='mode'?'crmModeGroup':'crmMapGroup';
+  document.querySelectorAll(`#${group} .crm-pill`).forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');
+  if(type==='mode') _crmMode=el.dataset.val;
+  else              _crmMap =el.dataset.val;
+}
+function crmSubmit(){
+  const name = document.getElementById('crmName').value.trim();
   playerName = document.getElementById('menuUsername')?.value.trim() || playerName;
-  selectedServer = { isReal: true, creating: true, name, mode };
+  selectedServer = { isReal:true, creating:true, name, mode:_crmMode, map:_crmMap };
+  document.getElementById('createRoomModal').classList.remove('vis');
   showScreen('sStreakSelect');
 }
 
@@ -1158,6 +1240,7 @@ window.confirmJoinReal = function(){
       type: 'create_room',
       name: selectedServer.name,
       mode: selectedServer.mode,
+      map:  selectedServer.map || 'city',
       playerInfo: { name: playerName, skin: playerSkin,
         hat: HATS[custState.hat]?.icon, face: FACES[custState.face]?.icon },
     });
@@ -1348,6 +1431,11 @@ let lobbyInterval=null,lobbyPlayers=[],isReady=false,gameStartCountdown=-1;
 let keys={},mouse={wx:0,wy:0,sx:0,sy:0,down:false,right:false};
 let animFrame=null;
 let canvas,ctx,mmCtx,adsCtx;
+let currentPendingMap='city'; // set by server game_start / joined_room
+let speedPads=[];
+let _crmMode='ffa', _crmMap='city'; // create-room modal state
+let playerTaunt=null; // {emoji,t} local player taunt display
+let remoteTaunts={}; // socketId -> {emoji,t}
 
 // ADS state
 let adsActive=false, adsFov=1.0, adsTarget=1.0;
@@ -1422,6 +1510,15 @@ function generateMap(){
   for(let i=0;i<8;i++){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
     weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-1,timer:0});
+  }
+
+  // Speed pads — glowing arrows on roads
+  for(let i=0;i<14;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    const px=rd.x+30+Math.random()*(Math.max(1,rd.w-60));
+    const py=rd.y+30+Math.random()*(Math.max(1,rd.h-60));
+    if(obstacles.some(o=>circleRect(px,py,30,o.x,o.y,o.w,o.h)))continue;
+    speedPads.push({x:px,y:py,angle:rd.dir==='h'?0:Math.PI/2});
   }
 
   // Spawn points
@@ -1539,6 +1636,15 @@ function generateForestMap(){
       y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),
       weaponId:-1,timer:0
     });
+  }
+
+  // Speed pads — on forest paths
+  for(let i=0;i<10;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    const px=rd.x+30+Math.random()*(Math.max(1,rd.w-60));
+    const py=rd.y+30+Math.random()*(Math.max(1,rd.h-60));
+    if(obstacles.some(o=>circleRect(px,py,30,o.x,o.y,o.w,o.h)))continue;
+    speedPads.push({x:px,y:py,angle:rd.dir==='h'?0:Math.PI/2});
   }
 
   // Spawn points — paths only, away from trees and obstacles
@@ -2359,7 +2465,7 @@ function updatePlayer(dt){
   else p.sprintEnergy=Math.min(100,p.sprintEnergy+dt*20);
   document.getElementById('hudSprint').classList.toggle('vis',p.sprint);
 
-  const speed=p.sliding?0:(p.sprint?280:200);
+  const speed=p.sliding?0:(p.sprint?280:200)*(p._speedBoost>0?1.75:1);
   let mdx=0,mdy=0;
   if(keys['KeyW']||keys['ArrowUp'])mdy-=1;
   if(keys['KeyS']||keys['ArrowDown'])mdy+=1;
@@ -2399,6 +2505,19 @@ function updatePlayer(dt){
     if(sp.timer>0){sp.timer-=dt;return;}
     if(Math.hypot(p.x-sp.x,p.y-sp.y)<32){ if(playerPickup(sp.weaponId)) sp.timer=20+Math.random()*10; }
   });
+
+  // Speed pads
+  speedPads.forEach(sp=>{
+    if(Math.hypot(p.x-sp.x,p.y-sp.y)<28){
+      if(!p._speedBoost||p._speedBoost<=0){
+        p._speedBoost=2.2;
+        showNotif('⚡ SPEED BOOST!',1400);
+        SND.pickup&&SND.pickup();
+        if(currentRoomId) wsSend({type:'speed_boost'});
+      }
+    }
+  });
+  if(p._speedBoost>0) p._speedBoost=Math.max(0,p._speedBoost-dt);
 
   // Trail particles
   if(p.trail&&p.trail!=='🚫'&&(mdx||mdy)){
@@ -2651,6 +2770,28 @@ function updateBullets(dt){
 }
 
 // ─── RENDER ────────────────────────────────────────────────────
+function drawSpeedPads(){
+  if(!speedPads||!speedPads.length)return;
+  const pulse=0.55+0.45*Math.abs(Math.sin(G.gameTime*3));
+  speedPads.forEach(sp=>{
+    ctx.save();ctx.translate(sp.x,sp.y);ctx.rotate(sp.angle);
+    // Glowing base
+    const grd=ctx.createRadialGradient(0,0,0,0,0,26);
+    grd.addColorStop(0,`rgba(255,220,0,${pulse*.45})`);
+    grd.addColorStop(1,'rgba(255,200,0,0)');
+    ctx.beginPath();ctx.arc(0,0,26,0,Math.PI*2);
+    ctx.fillStyle=grd;ctx.fill();
+    // Arrow shape
+    ctx.fillStyle=`rgba(255,220,0,${0.55+pulse*.35})`;
+    ctx.beginPath();
+    ctx.moveTo(18,0);ctx.lineTo(-4,-10);ctx.lineTo(-4,-4);
+    ctx.lineTo(-18,-4);ctx.lineTo(-18,4);ctx.lineTo(-4,4);
+    ctx.lineTo(-4,10);ctx.closePath();ctx.fill();
+    ctx.strokeStyle=`rgba(255,255,100,${pulse*.8})`;ctx.lineWidth=1.5;ctx.stroke();
+    ctx.restore();
+  });
+}
+
 function render(){
   if(!ctx)return;
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -2672,6 +2813,7 @@ function render(){
   drawPickups();
   drawObstacles();
   if(currentMapType==='forest'){ drawForestRocks(); }
+  drawSpeedPads();
   drawMines();
   drawSmokeClouds();
   drawSentries();
@@ -2704,6 +2846,16 @@ function render(){
       ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(hpX,hpY,hpW,hpH);
       ctx.fillStyle=hpPct>0.5?'#4f4':hpPct>0.25?'#fa4':'#f44';
       ctx.fillRect(hpX,hpY,hpW*hpPct,hpH);
+      // Taunt bubble
+      const rt=remoteTaunts[rp.socketId];
+      if(rt&&rt.t>0){
+        const ta=Math.min(1,rt.t);
+        ctx.save();ctx.globalAlpha=ta;
+        ctx.font=`${18+4*(1-Math.min(1,2.5-rt.t)*.4)}px serif`;
+        ctx.textAlign='center';ctx.textBaseline='bottom';
+        ctx.fillText(rt.emoji,rp.x,rp.y-44);
+        ctx.restore();
+      }
       ctx.restore();
     });
   }
@@ -2712,6 +2864,15 @@ function render(){
     if(G.player._hiding){ ctx.save(); ctx.globalAlpha=0.35; }
     drawEntity(G.player);
     if(G.player._hiding){ ctx.restore(); }
+    // Local player taunt bubble
+    if(playerTaunt&&playerTaunt.t>0){
+      const ta=Math.min(1,playerTaunt.t);
+      ctx.save();ctx.globalAlpha=ta;
+      ctx.font=`${18+4*(1-Math.min(1,2.5-playerTaunt.t)*.4)}px serif`;
+      ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillText(playerTaunt.emoji,G.player.x,G.player.y-44);
+      ctx.restore();
+    }
   }
   // Forest trees render OVER all entities (players walk under canopy)
   if(currentMapType==='forest') drawForestTrees();
@@ -2845,6 +3006,39 @@ function drawMines(){
   });
 }
 
+function drawExplosions(){
+  if(!G.explosions||!G.explosions.length)return;
+  G.explosions.forEach(e=>{
+    const a=Math.max(0,Math.min(1,e.alpha));
+    if(a<=0||e.r<=0)return;
+    // Outer shockwave ring
+    ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(255,200,60,${a*.9})`;ctx.lineWidth=5;ctx.stroke();
+    // Mid ring
+    if(e.r>10){
+      ctx.beginPath();ctx.arc(e.x,e.y,e.r*.6,0,Math.PI*2);
+      ctx.strokeStyle=`rgba(255,120,20,${a*.6})`;ctx.lineWidth=3;ctx.stroke();
+    }
+    // Radial gradient fill
+    const gr=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,e.r);
+    gr.addColorStop(0,   `rgba(255,230,80,${a*.55})`);
+    gr.addColorStop(0.35,`rgba(255,100,20,${a*.45})`);
+    gr.addColorStop(0.7, `rgba(200,30,0,${a*.25})`);
+    gr.addColorStop(1,   `rgba(100,0,0,0)`);
+    ctx.beginPath();ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+    ctx.fillStyle=gr;ctx.fill();
+    // Smoke wisp particles
+    if(e.r>20){
+      for(let i=0;i<6;i++){
+        const ang=i/6*Math.PI*2+e.r*.04;
+        const wr=e.r*(0.5+i*.08);
+        ctx.beginPath();ctx.arc(e.x+Math.cos(ang)*wr,e.y+Math.sin(ang)*wr,6+i*2,0,Math.PI*2);
+        ctx.fillStyle=`rgba(80,60,40,${a*.18})`;ctx.fill();
+      }
+    }
+  });
+}
+
 function drawSmokeClouds(){
   if(!G.smokeClouds)return;
   G.smokeClouds.forEach(s=>{
@@ -2953,16 +3147,7 @@ function drawBullets(){
   });
 }
 
-function drawExplosions(){
-  G.explosions.forEach(e=>{
-    const g=ctx.createRadialGradient(e.x,e.y,0,e.x,e.y,e.r);
-    g.addColorStop(0,`rgba(255,200,50,${e.alpha})`);
-    g.addColorStop(.5,`rgba(255,80,0,${e.alpha*.5})`);
-    g.addColorStop(1,'rgba(255,50,0,0)');
-    ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
-    ctx.fillStyle=g; ctx.fill();
-  });
-}
+
 
 function drawAirstrikes(){
   G.airstrikes.forEach(a=>{
@@ -3268,6 +3453,9 @@ function gameLoop(ts){
     }
     updateBullets(dt);
     updateSentries(dt);
+    // Tick local + remote taunts
+    if(playerTaunt){ playerTaunt.t-=dt; if(playerTaunt.t<=0)playerTaunt=null; }
+    Object.keys(remoteTaunts).forEach(sid=>{ remoteTaunts[sid].t-=dt; if(remoteTaunts[sid].t<=0) delete remoteTaunts[sid]; });
     // Explosions
     for(let i=G.explosions.length-1;i>=0;i--){ const e=G.explosions[i]; e.t-=dt;e.r+=dt*e.maxR*3;e.alpha=e.t*2; if(e.t<=0)G.explosions.splice(i,1); }
     // Damage numbers
@@ -3301,6 +3489,12 @@ document.addEventListener('keydown',e=>{
   if(e.code==='KeyN'&&G.nukeReady&&!nukeTargetMode) beginNukeTargeting();
   if(e.code==='KeyF') activateStreak(0);
   if(e.code==='KeyG') activateStreak(1);
+  if(e.code==='KeyZ'&&document.getElementById('sGame').classList.contains('active')&&G.player&&!G.player.dead){
+    const TAUNTS=['💀','😈','👑','🤣','🔥','💪','🫡','🤙'];
+    const em=TAUNTS[Math.floor(Math.random()*TAUNTS.length)];
+    playerTaunt={emoji:em,t:2.5};
+    if(currentRoomId) wsSend({type:'taunt',emoji:em});
+  }
   if(e.code==='Escape'&&document.getElementById('sGame').classList.contains('active')) exitToMenu();
   for(let i=0;i<5;i++) if(e.code===`Digit${i+1}`){switchWeapon(i);break;}
 });
@@ -3598,10 +3792,16 @@ function startGameFromLobby(){
   if(G.player) G.player._hiding=false;
   forestTrees=[];
 
-  // Choose map type from server name or randomly
-  const srvName=(selectedServer?.name||'').toUpperCase();
-  const useForest=srvName.includes('FOREST')||srvName.includes('WOOD')||srvName.includes('JUNGLE');
-  if(useForest) generateForestMap();
+  // Choose map from currentPendingMap (set by server on create_room / game_start)
+  // In solo mode fall back to selectedServer map or random
+  let _mapToUse = currentPendingMap;
+  if(!currentRoomId){
+    const srvName=(selectedServer?.name||'').toUpperCase();
+    if(srvName.includes('FOREST')||srvName.includes('WOOD')||srvName.includes('JUNGLE')) _mapToUse='forest';
+    else if(selectedServer?.map) _mapToUse=selectedServer.map;
+  }
+  speedPads=[];
+  if(_mapToUse==='forest') generateForestMap();
   else generateMap();
   const psp=getSpawnPoint([]);
   G.player=createPlayer(psp.x,psp.y);
