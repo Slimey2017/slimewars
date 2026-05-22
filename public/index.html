@@ -376,6 +376,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 @keyframes tauntPop{0%{transform:scale(0) translateY(0)}80%{transform:scale(1.25) translateY(-6px)}100%{transform:scale(1) translateY(0)}}
 @keyframes tauntFade{0%{opacity:1}100%{opacity:0}}
 
+.pe-team-badge{font-size:9px;padding:2px 7px;border-radius:2px;font-family:'Share Tech Mono';letter-spacing:1px;}
+.pe-team-blue{background:rgba(51,136,255,.18);border:1px solid #3af;color:#3af;}
+.pe-team-red{background:rgba(255,80,80,.18);border:1px solid #f55;color:#f55;}
 /* ── Speed-pad ─────────────────────────────────────────── */
 .speed-notif{color:#ffe000;}
 </style>
@@ -509,6 +512,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     </div>
     <span class="plcount" id="readyCount">0/0 ready</span>
     <button class="btn sm" id="forceStartBtn" onclick="forceStart()" style="display:none;border-color:#f97316;color:#f97316;">▶ FORCE START</button>
+    <button class="btn sm" id="switchTeamBtn" onclick="switchTeam()" style="display:none;border-color:#3af;color:#3af;">⇄ SWITCH TEAM</button>
     <button class="btn" id="readyBtn" onclick="toggleReady()">READY UP</button>
   </div>
 </div>
@@ -805,6 +809,7 @@ let remotePlayers = {}; // socketId -> state for rendering
 let wsConnected = false;
 let pingInterval = null;
 let latency = 0;
+let _lastLobbyPlayers = []; // tracks latest lobby player list for team sync
 
 function wsConnect() {
   return new Promise((resolve) => {
@@ -952,23 +957,24 @@ function handleServerMsg(msg) {
       break;
 
     case 'you_hit':
-  // Add a check to ensure G.player is defined first
-  if (G.player && !G.player.dead) { 
-    const dmg = msg.damage || 20;
-    const absorbed = Math.min(G.player.armor, Math.round(dmg * 0.4));
-    G.player.armor -= absorbed;
-    G.player.hp -= (dmg - absorbed);
+  if (G.player && !G.player.dead) {
+    // Server already computed exact deductions — apply them directly.
+    // Never recalculate armor absorption here; the server is authoritative.
+    const hpDmg    = msg.hpDamage    !== undefined ? msg.hpDamage    : (msg.damage || 20);
+    const armorDmg = msg.armorDamage !== undefined ? msg.armorDamage : 0;
+
+    G.player.armor  = Math.max(0, (G.player.armor  || 0) - armorDmg);
+    G.player.hp     = Math.max(0, (G.player.hp     || 0) - hpDmg);
     G.player.flicker = 0.6;
-    
-    // Check for death
+
     if (G.player.hp <= 0 && !G.player.dead) {
       G.player.dead = true;
-      G.player.hp = 0;
-      wsSend({ 
-        type: 'player_killed', 
-        victimId: mySocketId, 
-        victimName: playerName, 
-        weapon: msg.weapon 
+      G.player.hp   = 0;
+      wsSend({
+        type      : 'player_killed',
+        victimId  : mySocketId,
+        victimName: playerName,
+        weapon    : msg.weapon,
       });
     }
   }
@@ -1112,7 +1118,7 @@ function applyServerFilters(){
   const search = (document.getElementById('srvSearch')?.value||'').toLowerCase();
   let rooms = _allServerData;
   if(_srvFilterMode !== 'all') rooms = rooms.filter(r=>r.mode===_srvFilterMode);
-  if(_srvFilterOpenOnly) rooms = rooms.filter(r=>r.players < r.max);
+  if(_srvFilterOpenOnly) rooms = rooms.filter(r=>r.players < r.max && r.state !== 'gameover');
   if(search) rooms = rooms.filter(r=>r.name.toLowerCase().includes(search));
   renderServerRows(rooms);
 }
@@ -1141,11 +1147,12 @@ function renderServerRows(rooms){
     const pc = ping < 60 ? 'p-good' : ping < 120 ? 'p-ok' : 'p-bad';
     const full = r.players >= r.max;
     const locked = !!r.locked;
-    const cantJoin = full || locked;
+    const isGameover = r.state === 'gameover';
+    const cantJoin = full || locked || isGameover;
     const rowClick = cantJoin ? '' : `onclick="joinRealRoom('${r.id}')"`;
-    const rowStyle = locked ? ' style="opacity:0.5;cursor:default;"' : '';
-    const stateLabel = locked ? '🔴 IN GAME' : r.state === 'ingame' ? '🟢 IN GAME' : '🟡 LOBBY';
-    const btnLabel = full ? 'FULL' : locked ? 'LOCKED' : 'JOIN';
+    const rowStyle = (locked || isGameover) ? ' style="opacity:0.5;cursor:default;"' : '';
+    const stateLabel = isGameover ? '⬛ GAME OVER' : locked ? '🔴 IN GAME' : r.state === 'ingame' ? '🟠 IN GAME' : '🟢 LOBBY';
+    const btnLabel = isGameover ? 'ENDED' : full ? 'FULL' : locked ? 'LOCKED' : 'JOIN';
     return `<tr class="srv-row" ${rowClick}${rowStyle}>
       <td><span class="srv-name">${r.name}</span></td>
       <td style="color:#5a8a6a;">${stateLabel}</td>
@@ -1183,15 +1190,23 @@ function confirmJoinReal() {
 }
 
 function renderRealLobbyPlayers(serverPlayers) {
+  _lastLobbyPlayers = serverPlayers; // save for in-game team assignment
   const list = document.getElementById('playerList');
   if (!list) return;
   document.getElementById('playerCountLabel').textContent =
     `PLAYERS (${serverPlayers.length}/12)`;
+  const isTDM = document.getElementById('btnTDM')?.classList.contains('on');
   list.innerHTML = serverPlayers.map(p => {
     const isYou = p.socketId === mySocketId;
-    return `<div class="pe${p.ready ? ' ready' : ''}${isYou ? ' you' : ''}">
+    const teamBadge = isTDM
+      ? (p.team === 0
+          ? '<span class="pe-team-badge pe-team-blue">🔵 BLUE</span>'
+          : '<span class="pe-team-badge pe-team-red">🔴 RED</span>')
+      : '';
+    return `<div class="pe${p.ready ? ' ready' : ''}${isYou ? ' you' : ''}" style="${isTDM?(p.team===0?'border-left:3px solid #3af;':'border-left:3px solid #f55;'):''}">
       <div class="pe-ball" style="background:${BODY_COLORS[p.skin]?.color || '#39d614'};"></div>
       <span class="pe-name">${p.name}${isYou ? ' <span style="font-size:9px;color:#ffe000;">[YOU]</span>' : ''}</span>
+      ${teamBadge}
       ${p.ready ? '<span class="badge">READY</span>' : '<span class="waiting">waiting...</span>'}
     </div>`;
   }).join('');
@@ -1525,6 +1540,16 @@ function generateMap(){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
     weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-1,timer:0});
   }
+  // Medkits (+25 HP)
+  for(let i=0;i<10;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-2,timer:0});
+  }
+  // Full heal kits — rare, only 3
+  for(let i=0;i<3;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-3,timer:30});
+  }
 
   // Speed pads — glowing arrows on roads
   for(let i=0;i<14;i++){
@@ -1558,7 +1583,8 @@ function isInSmoke(e){
 // Returns true if entity e is inside a tree cluster (for hiding mechanic)
 function isInTree(e){
   if(!forestTrees||!forestTrees.length)return false;
-  return forestTrees.some(t=>Math.hypot(e.x-t.x,e.y-t.y)<t.r*.7);
+  // Use canopy radius so the player can actually walk into a tree to hide
+  return forestTrees.some(t=>Math.hypot(e.x-t.x,e.y-t.y)<t.canopy*.75);
 }
 
 // ─── FOREST MAP GENERATION ─────────────────────────────────────
@@ -1603,7 +1629,7 @@ function generateForestMap(){
 
       // Scatter trees randomly inside this block
       const area=bw*bh;
-      const treeCount=Math.floor(area/3200)+Math.floor(Math.random()*4);
+      const treeCount=Math.min(6, Math.floor(area/7000)+Math.floor(Math.random()*3));
       for(let t=0;t<treeCount;t++){
         const tx=bx+18+Math.random()*(bw-36);
         const ty=by+18+Math.random()*(bh-36);
@@ -1650,6 +1676,16 @@ function generateForestMap(){
       y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),
       weaponId:-1,timer:0
     });
+  }
+  // Forest medkits (+25 HP)
+  for(let i=0;i<10;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+20+Math.random()*(Math.max(1,rd.w-40)),y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),weaponId:-2,timer:0});
+  }
+  // Full heal kits — rare
+  for(let i=0;i<3;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+20+Math.random()*(Math.max(1,rd.w-40)),y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),weaponId:-3,timer:30});
   }
 
   // Speed pads — on forest paths
@@ -1928,9 +1964,25 @@ function playerWeapon(){
 
 function playerPickup(weaponId){
   const p=G.player;
+  // In gun game, block all weapon pickups — only allow healing items
+  if(isGunGame() && weaponId >= 0) return false;
   if(weaponId===-1){ // armor
     p.armor=Math.min(p.maxArmor,p.armor+30);
     showNotif('🛡️ ARMOR +30');
+    SND.pickup();
+    return true;
+  }
+  if(weaponId===-2){ // medkit — small heal
+    if(p.hp>=p.maxHp) return false; // full HP, don't consume
+    p.hp=Math.min(p.maxHp,p.hp+25);
+    showNotif('💊 MEDKIT +25 HP');
+    SND.pickup();
+    return true;
+  }
+  if(weaponId===-3){ // full heal kit
+    if(p.hp>=p.maxHp) return false;
+    p.hp=p.maxHp;
+    showNotif('❤️ FULLY HEALED!');
     SND.pickup();
     return true;
   }
@@ -2194,6 +2246,8 @@ function killEntity(killer,victim){
       }
     });
     SND.kill();
+    // Advance gun game on kill (offline mode — online handled via kill_confirmed)
+    if(isGunGame() && !currentRoomId) advanceGunGame();
   }
   if(victim.isPlayer) G.player.deaths++;
   addKillFeed(kn,vn);
@@ -2517,6 +2571,8 @@ function updatePlayer(dt){
   // Pickups
   weaponSpawns.forEach(sp=>{
     if(sp.timer>0){sp.timer-=dt;return;}
+    // In gun game, skip weapon spawns (only healing items allowed)
+    if(isGunGame() && sp.weaponId >= 0) return;
     if(Math.hypot(p.x-sp.x,p.y-sp.y)<32){ if(playerPickup(sp.weaponId)) sp.timer=20+Math.random()*10; }
   });
 
@@ -2717,7 +2773,8 @@ function updateBullets(dt){
         for(let ri=0;ri<remoteArr.length&&!hit;ri++){
           const rp=remoteArr[ri];
           if(!rp||rp.dead||!rp.x)continue;
-          if(gameMode==='tdm'&&rp.team===b.owner.team)continue;
+          // Use live team from remotePlayers (authoritative)
+          if(gameMode==='tdm'&&rp.team===G.player.team)continue;
           const rpR=18;
           if(Math.hypot(rp.x-b.x,rp.y-b.y)<rpR){
             // Notify server: we hit this remote player
@@ -2728,15 +2785,35 @@ function updateBullets(dt){
           }
         }
       }
-      // Player — hit by NPC bullets OR remote player bullets (fromRemote)
+      // Player hit by NPC or remote player bullets
       if(!hit&&!G.player.dead){
         const ownerIsRemote = b.fromRemote;
         const ownerIsNPC = !b.owner.isPlayer && !b.fromRemote;
         if(ownerIsNPC || ownerIsRemote){
-          const ownerTeam = b.owner?.team;
-          const same=gameMode==='tdm'&&ownerTeam===G.player.team;
-          if(!same&&Math.hypot(G.player.x-b.x,G.player.y-b.y)<G.player.r){
-            if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner||{isPlayer:false,team:-1}); else dealDamage(b.owner||{isPlayer:false,team:-1,name:'REMOTE'},G.player,b.dmg);
+          let ownerTeam;
+          if(ownerIsRemote && b.ownerId){
+            const liveRemote = remotePlayers[b.ownerId];
+            ownerTeam = liveRemote ? liveRemote.team : b.owner?.team;
+          } else {
+            ownerTeam = b.owner?.team;
+          }
+          const same = gameMode==='tdm' && ownerTeam !== undefined && ownerTeam === G.player.team;
+          if(!same && Math.hypot(G.player.x-b.x,G.player.y-b.y)<G.player.r){
+            if(ownerIsRemote){
+              // Remote bullet: server is authoritative — it sends you_hit with exact HP/armor deductions.
+              // Only apply visuals here; do NOT call dealDamage (that would double-dip HP).
+              if(b.explosive>0) explode(b.x,b.y,b.explosive,b.dmg,b.owner||{isPlayer:false,team:-1});
+              else {
+                G.player.flicker=0.6;
+                const v=document.getElementById('hudVignette');
+                v.classList.add('hit'); clearTimeout(v._t); v._t=setTimeout(()=>v.classList.remove('hit'),200);
+                G.shakeX=(Math.random()-.5)*10; G.shakeY=(Math.random()-.5)*10;
+              }
+            } else {
+              // NPC bullet: fully client-side, dealDamage handles armor correctly.
+              if(b.explosive>0) explode(b.x,b.y,b.explosive,b.dmg,b.owner||{isPlayer:false,team:-1});
+              else dealDamage(b.owner||{isPlayer:false,team:-1,name:'NPC'},G.player,b.dmg);
+            }
             if(b.poison){ G.player._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
             if(!b.boomerang) hit=true;
           }
@@ -2845,15 +2922,16 @@ function render(){
       const face = rp.face || null;
       const ang = rp.angle || 0;
       drawSlime(ctx, rp.x, rp.y, 18, skin, ang, 0, rp.team, hat, face);
-      // Name tag
+      // Name tag — blue for teammates, red for enemies in TDM
+      const isTeammate = gameMode==='tdm' && G.player && rp.team === G.player.team;
       ctx.save();
       ctx.font="bold 11px 'Share Tech Mono'";
       ctx.textAlign='center';
       ctx.textBaseline='bottom';
       ctx.fillStyle='rgba(0,0,0,0.55)';
       ctx.fillRect(rp.x-32, rp.y-38, 64, 14);
-      ctx.fillStyle='#7af';
-      ctx.fillText(rp.name||'???', rp.x, rp.y-26);
+      ctx.fillStyle = isTeammate ? '#3af' : (gameMode==='tdm' ? '#f55' : '#7af');
+      ctx.fillText((isTeammate ? '🔵 ' : (gameMode==='tdm' ? '🔴 ' : '')) + (rp.name||'???'), rp.x, rp.y-26);
       // HP bar
       const hpW=44, hpH=4, hpX=rp.x-hpW/2, hpY=rp.y-24;
       const hpPct=Math.max(0,Math.min(1,(rp.hp||0)/100));
@@ -3088,6 +3166,8 @@ function drawSentries(){
 function drawPickups(){
   weaponSpawns.forEach(sp=>{
     if(sp.timer>0)return;
+    // In gun game, hide weapon spawns but keep healing items visible
+    if(isGunGame() && sp.weaponId >= 0) return;
     const t=G.gameTime;
     const bob=Math.sin(t*1.8+sp.weaponId*.7)*2.5;
     const pulse=Math.sin(t*2.5+sp.weaponId)*3;
@@ -3102,6 +3182,24 @@ function drawPickups(){
       ctx.fillText('🛡️',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(100,180,255,.9)'; ctx.font='bold 10px sans-serif';
       ctx.textBaseline='top'; ctx.fillText('ARMOR',sp.x,sp.y+bob+18);
+    } else if(sp.weaponId===-2){
+      // Medkit (+25 HP)
+      ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
+      ctx.fillStyle='rgba(60,0,0,.65)'; ctx.fill();
+      ctx.strokeStyle='#f44'; ctx.lineWidth=2; ctx.stroke();
+      ctx.font='16px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('💊',sp.x,sp.y+bob);
+      ctx.fillStyle='rgba(255,120,120,.95)'; ctx.font='bold 10px sans-serif';
+      ctx.textBaseline='top'; ctx.fillText('+25 HP',sp.x,sp.y+bob+18);
+    } else if(sp.weaponId===-3){
+      // Full heal kit
+      ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,18+pulse,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,60,0,.65)'; ctx.fill();
+      ctx.strokeStyle='#4f4'; ctx.lineWidth=2.5; ctx.stroke();
+      ctx.font='17px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('❤️',sp.x,sp.y+bob);
+      ctx.fillStyle='rgba(100,255,100,.95)'; ctx.font='bold 10px sans-serif';
+      ctx.textBaseline='top'; ctx.fillText('FULL HEAL',sp.x,sp.y+bob+20);
     } else {
       const w=WEAPONS_BASE[sp.weaponId];
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
@@ -3195,8 +3293,9 @@ function drawEntity(e){
   ctx.fillRect(bx,by,bw*hr,bh);
   // Armor bar
   if(e.armor>0){
+    const armorMax = e.maxArmor || 50; // NPCs don't define maxArmor; default to 50
     ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(bx,by+6,bw,3);
-    ctx.fillStyle='#3af'; ctx.fillRect(bx,by+6,bw*(e.armor/e.maxArmor),3);
+    ctx.fillStyle='#3af'; ctx.fillRect(bx,by+6,bw*Math.min(1,e.armor/armorMax),3);
   }
   // Name — always use current playerName for local player
   const displayName = e.isPlayer ? playerName : e.name;
@@ -3261,7 +3360,11 @@ function updateHUD(){
   document.getElementById('hpFill').style.width=hpPct+'%';
   document.getElementById('hpFill').style.background=hpPct>50?'linear-gradient(90deg,#4f4,#2b2)':hpPct>25?'linear-gradient(90deg,#fa4,#a60)':'linear-gradient(90deg,#f44,#a00)';
   document.getElementById('hpNum').textContent=Math.ceil(p.hp);
-  document.getElementById('armorFill').style.width=((p.armor/p.maxArmor)*100)+'%';
+  const armorPct = Math.max(0, Math.min(1, (p.armor||0) / (p.maxArmor||50))) * 100;
+  document.getElementById('armorFill').style.width = armorPct + '%';
+  // Show/hide armor HUD row based on whether player has armor
+  const armorEl = document.getElementById('hudArmor');
+  if(armorEl) armorEl.style.opacity = p.armor > 0 ? '1' : '0.35';
 
   const pw=playerWeapon();
   if(pw){
@@ -3765,6 +3868,10 @@ function toggleReady(){
 function forceStart(){
   if(currentRoomId) wsSend({type:'force_start'});
 }
+function switchTeam(){
+  if(!currentRoomId){ showNotif('⚠️ Only available in online TDM'); return; }
+  wsSend({ type: 'switch_team' });
+}
 function setMode(m){
   gameMode=m; G.mode=m;
   document.getElementById('btnFFA').classList.toggle('on',m==='ffa');
@@ -3780,6 +3887,9 @@ function lockLobbyMode(m){
   ffa.style.cursor='default'; tdm.style.cursor='default';
   ffa.title='Mode is locked — set at room creation';
   tdm.title='Mode is locked — set at room creation';
+  // Show Switch Team button only in TDM lobby
+  const switchBtn = document.getElementById('switchTeamBtn');
+  if(switchBtn) switchBtn.style.display = m==='tdm' ? '' : 'none';
   if(m==='gungame'){
     ffa.style.opacity='0.28'; tdm.style.opacity='0.28';
     ffa.classList.remove('on'); tdm.classList.remove('on');
@@ -3850,7 +3960,16 @@ function startGameFromLobby(){
       G.scores[npc.name]={k:0,d:0,score:0};
     }
   }
-  if(gameMode==='tdm') G.player.team=0;
+  if(gameMode==='tdm'){
+    // In online mode, use the team the server assigned us (from lobby player list)
+    // Find our entry in the last-received lobby players array
+    let assignedTeam = 0;
+    if(currentRoomId && typeof _lastLobbyPlayers !== 'undefined'){
+      const myEntry = _lastLobbyPlayers.find(p => p.socketId === mySocketId);
+      if(myEntry) assignedTeam = myEntry.team || 0;
+    }
+    G.player.team = assignedTeam;
+  }
   ['hudRespawn','hudGO','hudSB'].forEach(id=>document.getElementById(id).classList.remove('vis'));
   document.getElementById('gchatInput').classList.remove('active');
   document.getElementById('gchatMsgs').innerHTML='';
