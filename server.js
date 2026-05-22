@@ -5,6 +5,7 @@ const http       = require('http');
 const { WebSocketServer, WebSocket } = require('ws');
 const { v4: uuidv4 } = require('uuid');
 const path       = require('path');
+const fs         = require('fs');
 
 const app    = express();
 const server = http.createServer(app);
@@ -15,9 +16,16 @@ const MAX_ROOM_PLAYERS = 12;
 const TICK_MS          = 50;   // 20 Hz world snapshots
 
 // ─── Static files ──────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (_req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// Serve from 'public/' if it exists, fall back to current directory
+const publicDir = fs.existsSync(path.join(__dirname, 'public'))
+  ? path.join(__dirname, 'public')
+  : __dirname;
+app.use(express.static(publicDir));
+app.get('/', (_req, res) => {
+  const indexPath = path.join(publicDir, 'index.html');
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  res.status(404).send('index.html not found. Place it in the public/ folder or alongside server.js.');
+});
 app.get('/health', (_req, res) =>
   res.json({ ok: true, rooms: rooms.size, players: players.size }));
 
@@ -76,19 +84,17 @@ function getPlayerRoom(player) {
 function getRoomList() {
   const list = [];
   rooms.forEach(r => {
-    if (r.state !== 'gameover') {
-      list.push({
-        id         : r.id,
-        name       : r.name,
-        mode       : r.mode,
-        players    : r.players.size,
-        max        : MAX_ROOM_PLAYERS,
-        state      : r.state,
-        locked     : !!r.locked,
-        isPrivate  : !!r.isPrivate,
-        ping       : Math.floor(Math.random() * 40) + 5,
-      });
-    }
+    list.push({
+      id         : r.id,
+      name       : r.name,
+      mode       : r.mode,
+      players    : r.players.size,
+      max        : MAX_ROOM_PLAYERS,
+      state      : r.state,
+      locked     : !!r.locked,
+      isPrivate  : !!r.isPrivate,
+      ping       : Math.floor(Math.random() * 40) + 5,
+    });
   });
   return list;
 }
@@ -276,6 +282,20 @@ function handleMessage(ws, msg) {
       send(ws, { type: 'error', msg: 'Game mode is locked.' });
       break;
 
+    // ── Switch team (TDM lobby only) ──────────────────────────────
+    case 'switch_team': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'lobby' || room.mode !== 'tdm') break;
+      const rp = room.players.get(player.socketId);
+      if (!rp) break;
+      // Toggle between team 0 and team 1
+      const newTeam = rp.team === 0 ? 1 : 0;
+      rp.team = newTeam;
+      player.team = newTeam;
+      broadcast(room, { type: 'lobby_players', players: getLobbyPlayers(room) });
+      break;
+    }
+
     case 'force_start': {
       const room = getPlayerRoom(player);
       if (room && room.state === 'lobby') startGame(room);
@@ -357,19 +377,25 @@ function handleMessage(ws, msg) {
       const targetRp = room.players.get(msg.targetId);
       if (!targetRp || targetRp.dead) break;
 
-      const damage   = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
-      const absorbed = targetRp.armor > 0
+      // TDM: block friendly fire — attacker and target on same team
+      if (room.mode === 'tdm' && targetRp.team === player.team) break;
+
+      const damage     = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
+      const absorbed   = targetRp.armor > 0
         ? Math.min(targetRp.armor, Math.round(damage * 0.4)) : 0;
-      targetRp.armor = Math.max(0, targetRp.armor - absorbed);
-      targetRp.hp    = Math.max(0, targetRp.hp   - (damage - absorbed));
+      const hpDamage   = damage - absorbed;
+      targetRp.armor   = Math.max(0, targetRp.armor - absorbed);
+      targetRp.hp      = Math.max(0, targetRp.hp    - hpDamage);
 
       const targetWs = wsBySocketId(msg.targetId);
       if (targetWs) {
         send(targetWs, {
-          type      : 'you_hit',
-          damage,
-          attackerId: player.socketId,
-          weapon    : msg.weapon || '?',
+          type        : 'you_hit',
+          damage,           // raw — kept for display/log purposes
+          hpDamage,         // exact HP to deduct (post-armor)
+          armorDamage : absorbed, // exact armor to deduct
+          attackerId  : player.socketId,
+          weapon      : msg.weapon || '?',
         });
       }
 
@@ -609,6 +635,38 @@ function handleMessage(ws, msg) {
       break;
     }
 
+    // ── Player respawn relay (so others can see you reappear) ─────
+    case 'player_respawned': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      const rp = room.players.get(player.socketId);
+      if (rp) {
+        rp.dead  = false;
+        rp.hp    = 100;
+        rp.armor = 0;
+        if (msg.x !== undefined) rp.x = msg.x;
+        if (msg.y !== undefined) rp.y = msg.y;
+      }
+      broadcast(room, {
+        type    : 'player_respawned',
+        socketId: player.socketId,
+        x       : msg.x,
+        y       : msg.y,
+      }, ws);
+      break;
+    }
+
+    // ── UAV scan relay ────────────────────────────────────────────
+    case 'uav_scan': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type    : 'uav_scan',
+        socketId: player.socketId,
+      }, ws);
+      break;
+    }
+
     default:
       break;
   }
@@ -624,14 +682,15 @@ function joinRoom(ws, roomId, info = {}) {
   if (!room)                                 return send(ws, { type: 'error', msg: 'Room not found' });
   if (room.players.size >= MAX_ROOM_PLAYERS) return send(ws, { type: 'error', msg: 'Room is full' });
   if (room.state === 'gameover')             return send(ws, { type: 'error', msg: 'Game already ended' });
-  if (room.state === 'ingame' && room.locked && !room.isPrivate) return send(ws, { type: 'error', msg: 'Room is locked — game in progress' });
-  // Private rooms: block all joins unless correct password supplied (host is already inside)
-  if (room.isPrivate && player.socketId !== room.hostId) {
+  // Private locked rooms block all non-host joins
+  if (room.locked && room.isPrivate && player.socketId !== room.hostId) {
     if (room.password && (info || {}).password !== room.password)
       return send(ws, { type: 'error', msg: 'Wrong password — room is private' });
     if (!room.password)
       return send(ws, { type: 'error', msg: 'Room is private — invite only' });
   }
+  // Public rooms locked mid-game still allow late joins (spectators catch up via game_start)
+
   applyPlayerInfo(player, info || {});
   player.roomId = roomId;
   player.ready  = false;
@@ -690,7 +749,7 @@ function joinRoom(ws, roomId, info = {}) {
 
   // Mid-game join: send game_start so the client starts immediately
   if (room.state === 'ingame') {
-    send(ws, { type: 'game_start', mode: room.mode, map: room.map, scoreLimit: room.scoreLimit, scores: room.scores });
+    send(ws, { type: 'game_start', mode: room.mode, map: room.map, scoreLimit: room.scoreLimit, scores: room.scores, hostId: room.hostId });
   }
 }
 
@@ -727,7 +786,7 @@ function checkAutoStart(room) {
   if (room.state !== 'lobby' || room.players.size < 2) return;
   let allReady = true;
   room.players.forEach(p => { if (!p.ready) allReady = false; });
-  if (allReady) startCountdown(room);
+  if (allReady && room.players.size >= 2) startCountdown(room);
 }
 
 function startCountdown(room) {
@@ -762,11 +821,23 @@ function startGame(room) {
     scoreLimit: room.scoreLimit,
     scores    : room.scores,
     players   : getLobbyPlayers(room),
+    hostId    : room.hostId,
   });
 }
 
 function checkWin(room) {
   if (room.state !== 'ingame') return;
+  if (room.mode === 'gungame') {
+    // Gun game win is handled via gungame_advance (slot >= 22)
+    // This is a safety fallback only
+    Object.entries(room.scores).forEach(([sid, s]) => {
+      if (s.k >= room.scoreLimit) {
+        const wp = room.players.get(sid);
+        endGame(room, wp ? wp.name : 'Unknown', sid);
+      }
+    });
+    return;
+  }
   if (room.mode === 'ffa') {
     let winner = null;
     Object.entries(room.scores).forEach(([sid, s]) => {
@@ -777,6 +848,7 @@ function checkWin(room) {
       endGame(room, wp ? wp.name : 'Unknown', winner);
     }
   } else {
+    // TDM
     const team = { 0: 0, 1: 0 };
     Object.entries(room.scores).forEach(([sid, s]) => {
       const p = room.players.get(sid);
@@ -785,6 +857,13 @@ function checkWin(room) {
     if      (team[0] >= room.scoreLimit) endGame(room, 'BLUE TEAM', null);
     else if (team[1] >= room.scoreLimit) endGame(room, 'RED TEAM',  null);
   }
+}
+
+function broadcastRoomListToAll() {
+  const list = getRoomList();
+  players.forEach((p, ws) => {
+    if (!p.roomId) send(ws, { type: 'room_list', rooms: list });
+  });
 }
 
 function endGame(room, winnerName, winnerSocketId) {
@@ -796,6 +875,8 @@ function endGame(room, winnerName, winnerSocketId) {
     scores        : room.scores,
     players       : getLobbyPlayers(room),
   });
+  // Notify everyone in the server browser that this room's state changed
+  broadcastRoomListToAll();
 
   setTimeout(() => {
     if (room.players.size === 0) {
@@ -815,7 +896,8 @@ function endGame(room, winnerName, winnerSocketId) {
       if (!room.players.has(room.hostId)) {
         room.hostId = room.players.keys().next().value || null;
       }
-      broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room) });
+      broadcast(room, { type: 'rematch_lobby', players: getLobbyPlayers(room), hostId: room.hostId });
+      broadcastRoomListToAll();
     }
   }, 15_000);
 }
