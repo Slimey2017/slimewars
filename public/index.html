@@ -21,12 +21,12 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-thumb{background:#2a4060;}
 
 /* MENU */
-#sMenu{flex-direction:column;align-items:center;justify-content:center;
-  background:#0d1520;
+#sMenu{flex-direction:row;align-items:stretch;justify-content:center;
+  background:#0d1520;overflow:hidden;
   background-image:linear-gradient(rgba(0,180,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,180,255,.04) 1px,transparent 1px);
   background-size:50px 50px;}
 #sMenu::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(0,80,150,.18) 0%,transparent 70%);pointer-events:none;}
-.menu-logo{text-align:center;margin-bottom:28px;}
+.menu-logo{text-align:center;margin-bottom:14px;}
 .menu-logo-title{font-family:'Fredoka One',cursive;font-size:70px;line-height:1;background:linear-gradient(180deg,#fbbf24 0%,#f97316 50%,#ef4444 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 4px 20px rgba(249,115,22,.55));letter-spacing:2px;}
 .menu-logo-sub{font-family:'Fredoka One',cursive;font-size:32px;background:linear-gradient(180deg,#fb923c 0%,#ef4444 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:4px;}
 .menu-logo-edition{font-size:11px;color:#4a9aaa;letter-spacing:7px;margin-top:6px;}
@@ -39,7 +39,37 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .menu-status{position:absolute;bottom:22px;font-size:11px;color:#2a5a6a;letter-spacing:3px;}
 .menu-status .online{color:#39ff14;}.menu-status .count{color:#7ad;}
 
-/* SERVER BROWSER */
+/* MENU 3-COLUMN LAYOUT */
+#sMenu{flex-direction:row !important;align-items:stretch;justify-content:center;}
+.menu-center{display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 20px;z-index:1;}
+.menu-side{width:240px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;padding:18px 12px;overflow-y:auto;justify-content:center;}
+.menu-side::-webkit-scrollbar{width:3px;}
+.menu-side::-webkit-scrollbar-thumb{background:#1a3050;}
+.menu-side.left{background:linear-gradient(to right,rgba(5,10,20,.7) 60%,transparent);}
+.menu-side.right{background:linear-gradient(to left,rgba(5,10,20,.7) 60%,transparent);}
+.news-col-hdr{display:flex;align-items:center;gap:6px;margin-bottom:4px;padding-bottom:6px;border-bottom:1px solid rgba(26,53,80,.6);}
+.news-col-hdr-title{font-family:'Orbitron';font-size:9px;color:var(--orange);letter-spacing:3px;}
+.news-col-hdr-badge{margin-left:auto;font-size:7px;padding:1px 5px;border:1px solid var(--orange);color:var(--orange);letter-spacing:2px;animation:newsBlink 1.4s infinite;}
+@keyframes newsBlink{0%,100%{opacity:1}50%{opacity:.35}}
+.nc{width:100%;background:rgba(5,12,25,.88);border:1px solid #1a3050;border-radius:3px;display:flex;flex-direction:column;overflow:hidden;transition:border-color .15s,box-shadow .15s;cursor:default;flex-shrink:0;}
+.nc:hover{border-color:#3a6aaa;box-shadow:0 0 12px rgba(0,100,200,.2);}
+.nc.nuke-card:hover{border-color:#f44;box-shadow:0 0 12px rgba(255,50,50,.25);}
+.nc.armor-card:hover{border-color:#3af;box-shadow:0 0 12px rgba(51,170,255,.2);}
+.nc.green-card:hover{border-color:#39ff14;box-shadow:0 0 12px rgba(57,255,20,.15);}
+.nc-img{width:100%;height:90px;position:relative;overflow:hidden;flex-shrink:0;}
+.nc-img canvas{display:block;width:100%;height:90px;}
+.nc-body{padding:7px 9px;display:flex;flex-direction:column;gap:3px;}
+.nc-tag{display:inline-flex;align-items:center;gap:4px;font-size:7px;padding:2px 5px;border-radius:1px;letter-spacing:1px;margin-bottom:1px;width:fit-content;}
+.nc-tag.nuke{background:rgba(255,30,30,.15);border:1px solid #f44;color:#f88;}
+.nc-tag.weapon{background:rgba(57,255,20,.1);border:1px solid #39ff14;color:#39ff14;}
+.nc-tag.armor{background:rgba(51,170,255,.1);border:1px solid #3af;color:#3af;}
+.nc-tag.update{background:rgba(249,115,22,.12);border:1px solid var(--orange);color:var(--orange);}
+.nc-tag.mode{background:rgba(120,80,255,.12);border:1px solid #a06aff;color:#c09aff;}
+.nc-tag.map{background:rgba(0,180,100,.1);border:1px solid #0fa;color:#0fa;}
+.nc-title{font-family:'Orbitron';font-size:9px;color:#ddeeff;letter-spacing:1px;line-height:1.3;}
+.nc-text{font-size:9px;color:#7a9aaa;line-height:1.5;}
+.nc-sub{font-size:8px;color:#2a5070;margin-top:2px;border-top:1px solid rgba(26,53,80,.4);padding-top:3px;}
+
 #sBrowser{flex-direction:column;padding:30px;gap:15px;}
 .screen-hdr{display:flex;align-items:center;gap:20px;border-bottom:1px solid var(--border);padding-bottom:15px;}
 .screen-title{font-family:'Orbitron';font-size:22px;font-weight:700;color:var(--orange);letter-spacing:3px;}
@@ -387,27 +417,116 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
 <!-- MENU -->
 <div id="sMenu" class="screen active">
-  <div class="menu-logo">
-    <canvas id="menuSlime" width="80" height="80" style="display:block;margin:0 auto 12px;"></canvas>
-    <div class="menu-logo-title">SLIME WARS</div>
-    <div class="menu-logo-sub">ADVANCED EDITION</div>
-    <div class="menu-logo-edition">v3 ARSENAL EDITION &nbsp;·&nbsp; 22 WEAPONS · NUKE STRIKE</div>
+
+  <!-- LEFT NEWS COLUMN -->
+  <div class="menu-side left">
+    <div class="news-col-hdr">
+      <span style="font-size:11px;">📡</span>
+      <span class="news-col-hdr-title">INTEL</span>
+      <span class="news-col-hdr-badge">● LIVE</span>
+    </div>
+
+    <!-- NUKE card -->
+    <div class="nc nuke-card">
+      <div class="nc-img"><canvas id="ncNuke" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag nuke">☢ NUKE STRIKE</span>
+        <div class="nc-title">TACTICAL NUCLEAR OPTION</div>
+        <div class="nc-text">Unlocks after <strong style="color:#fbbf24">8 kills</strong>. Select any target — a <strong style="color:#f44">600-radius</strong> blast detonates after a 10s countdown visible to all. Nothing survives a direct hit.</div>
+        <div class="nc-sub">8-kill streak required · Wipes the entire blast zone</div>
+      </div>
+    </div>
+
+    <!-- RAILGUN card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncRail" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag weapon">⚡ RAILGUN</span>
+        <div class="nc-title">HIGH-VELOCITY LASER ROUND</div>
+        <div class="nc-text">Fires a <strong style="color:#00ffff">hitscan laser</strong> with near-infinite range and zero bullet drop. Extreme damage — one clean hit on an unarmored target is a kill.</div>
+        <div class="nc-sub">Best in open maps · Slow reload · Aim carefully</div>
+      </div>
+    </div>
+
+    <!-- WEAPONS card -->
+    <div class="nc green-card">
+      <div class="nc-img"><canvas id="ncWeapons" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag weapon">🔫 22 WEAPONS</span>
+        <div class="nc-title">FULL ARSENAL BREAKDOWN</div>
+        <div class="nc-text">Pistols, SMGs, ARs, snipers, launchers, melee. Minigun has <strong style="color:#fbbf24">infinite ammo</strong>. Flamethrower burns. Boomerang returns. Shotgun shreds close range.</div>
+        <div class="nc-sub">Weapon pickups respawn on map · Control key zones!</div>
+      </div>
+    </div>
   </div>
-  <div class="menu-nav">
-    <button class="menu-btn primary" onclick="showScreen('sBrowser')">▶ PLAY ONLINE</button>
-    <button class="menu-btn" onclick="quickJoinOnline()" style="border-color:#1e4a2a;color:#b0d0b0;">⚡ QUICK JOIN</button>
-    <button class="menu-btn" onclick="startSoloPractice()">🤖 SOLO PRACTICE</button>
-    <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
-    <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
-    <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
-    <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
+
+  <!-- CENTER: LOGO + NAV -->
+  <div class="menu-center">
+    <div class="menu-logo">
+      <canvas id="menuSlime" width="80" height="80" style="display:block;margin:0 auto 12px;"></canvas>
+      <div class="menu-logo-title">SLIME WARS</div>
+      <div class="menu-logo-sub">ADVANCED EDITION</div>
+      <div class="menu-logo-edition">v3 ARSENAL EDITION &nbsp;·&nbsp; 22 WEAPONS · NUKE STRIKE</div>
+    </div>
+    <div class="menu-nav">
+      <button class="menu-btn primary" onclick="showScreen('sBrowser')">▶ PLAY ONLINE</button>
+      <button class="menu-btn" onclick="quickJoinOnline()" style="border-color:#1e4a2a;color:#b0d0b0;">⚡ QUICK JOIN</button>
+      <button class="menu-btn" onclick="startSoloPractice()">🤖 SOLO PRACTICE</button>
+      <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
+      <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
+      <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
+      <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+      <span style="font-size:10px;color:#3a6a8a;letter-spacing:2px;">USERNAME</span>
+      <input id="menuUsername" value="SlimeyPlayer" maxlength="16"
+        style="width:170px;padding:6px 9px;background:rgba(0,0,0,.5);border:1px solid #1e3a5a;border-bottom-color:#3af;color:#7ad;font-family:'Share Tech Mono';font-size:13px;outline:none;"
+        oninput="playerName=this.value.trim()||'SlimeyPlayer';document.getElementById('custPreviewName').textContent=playerName;">
+    </div>
   </div>
-  <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-    <span style="font-size:10px;color:#3a6a8a;letter-spacing:2px;">USERNAME</span>
-    <input id="menuUsername" value="SlimeyPlayer" maxlength="16"
-      style="width:170px;padding:6px 9px;background:rgba(0,0,0,.5);border:1px solid #1e3a5a;border-bottom-color:#3af;color:#7ad;font-family:'Share Tech Mono';font-size:13px;outline:none;"
-      oninput="playerName=this.value.trim()||'SlimeyPlayer';document.getElementById('custPreviewName').textContent=playerName;">
+
+  <!-- RIGHT NEWS COLUMN -->
+  <div class="menu-side right">
+    <div class="news-col-hdr">
+      <span style="font-size:11px;">🗞</span>
+      <span class="news-col-hdr-title">UPDATES</span>
+      <span class="news-col-hdr-badge">● NEW</span>
+    </div>
+
+    <!-- ARMOR card -->
+    <div class="nc armor-card">
+      <div class="nc-img"><canvas id="ncArmor" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag armor">🛡 ARMOR BUFFED</span>
+        <div class="nc-title">60% DAMAGE REDUCTION</div>
+        <div class="nc-text">Armor now blocks <strong style="color:#3af">60% of each hit</strong>, up from 40%. Care Package = full armor. Shield streak = +50. Stack it before pushing — it drains with hits.</div>
+        <div class="nc-sub">Armor pickups on map · Shield streak = +50 armor</div>
+      </div>
+    </div>
+
+    <!-- SCORESTREAKS card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncStreaks" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag update">📦 SCORESTREAKS</span>
+        <div class="nc-title">CHOOSE YOUR LOADOUT</div>
+        <div class="nc-text">Pick 2 per match: UAV, Airstrike, Sentry, Care Package, Shield, Chopper, or the <strong style="color:#f44">Nuke</strong>. Each has a kill threshold. Streak resets on death — stay alive!</div>
+        <div class="nc-sub">Gun Game disables streaks · FFA + TDM supported</div>
+      </div>
+    </div>
+
+    <!-- GAME MODES card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncModes" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag mode">⚔ GAME MODES</span>
+        <div class="nc-title">FFA · TDM · GUN GAME</div>
+        <div class="nc-text"><strong style="color:#fa4">FFA</strong>: 30 kills wins. <strong style="color:#3af">TDM</strong>: 50 team kills, auto-balanced teams, friendly fire blocked. <strong style="color:#c09aff">Gun Game</strong>: cycle all 22 weapons — first to finish wins.</div>
+        <div class="nc-sub">Up to 12 players per room · Host can force start</div>
+      </div>
+    </div>
   </div>
+
   <div class="menu-status">SERVER: <span class="online">ONLINE</span> &nbsp;|&nbsp; ONLINE: <span class="count" id="onlinePcount">0</span> &nbsp;|&nbsp; <span id="menuMuteBtn" onclick="toggleMute()" style="cursor:pointer;color:#39ff14;letter-spacing:2px;">🔊 MUSIC</span></div>
 </div>
 
@@ -2152,9 +2271,9 @@ function getMeleeTargets(owner){
 
 function dealDamage(attacker,victim,dmg){
   if(victim.dead)return;
-  // Armor absorbs 40%
+  // Armor absorbs 60%
   if(victim.armor>0){
-    const absorbed=Math.min(victim.armor,dmg*.4|0);
+    const absorbed=Math.min(victim.armor,dmg*.6|0);
     victim.armor=Math.max(0,victim.armor-absorbed);
     dmg-=absorbed;
   }
@@ -4644,6 +4763,217 @@ loadSettings();
 // ─── INIT ──────────────────────────────────────────────────────
 initServers();
 drawMenuSlime();
+drawNewsCards();
+
+// ─── NEWS CARD CANVAS ILLUSTRATIONS ───────────────────────────
+function drawNewsCards(){
+  drawNukeCard();
+  drawRailCard();
+  drawWeaponsCard();
+  drawArmorCard();
+  drawStreaksCard();
+}
+
+function ncCtx(id){
+  const c=document.getElementById(id); if(!c)return null;
+  // Match canvas height to rendered height
+  c.height=c.parentElement.offsetHeight||110;
+  return c.getContext('2d');
+}
+
+function drawNukeCard(){
+  const c=document.getElementById('ncNuke'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||110;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  // Dark red bg
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#1a0505'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  // Grid lines
+  cx.strokeStyle='rgba(255,30,30,.06)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=12){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=12){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Blast circle — pulsing red glow
+  const cx2=W/2, cy2=H*0.48;
+  const pulse=0.6+0.4*Math.abs(Math.sin(Date.now()/600));
+  // Outer glow
+  const grd=cx.createRadialGradient(cx2,cy2,0,cx2,cy2,32);
+  grd.addColorStop(0,`rgba(255,30,30,${pulse*0.5})`);
+  grd.addColorStop(0.6,`rgba(255,60,0,${pulse*0.18})`);
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  cx.fillStyle=grd; cx.beginPath(); cx.arc(cx2,cy2,32,0,Math.PI*2); cx.fill();
+  // Dashed blast radius ring
+  cx.strokeStyle=`rgba(255,50,50,${0.7+pulse*0.3})`; cx.lineWidth=1.5; cx.setLineDash([4,3]);
+  cx.beginPath(); cx.arc(cx2,cy2,26,0,Math.PI*2); cx.stroke(); cx.setLineDash([]);
+  // Crosshair
+  cx.strokeStyle='rgba(255,80,80,.9)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(cx2-10,cy2); cx.lineTo(cx2+10,cy2); cx.stroke();
+  cx.beginPath(); cx.moveTo(cx2,cy2-10); cx.lineTo(cx2,cy2+10); cx.stroke();
+  // Slime inside blast
+  cx.fillStyle='rgba(255,60,60,.85)';
+  cx.beginPath(); cx.arc(cx2,cy2,7,0,Math.PI*2); cx.fill();
+  cx.fillStyle='rgba(0,0,0,.4)'; cx.font='8px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('☢',cx2,cy2);
+  // Shockwave rings
+  for(let i=1;i<=3;i++){
+    cx.strokeStyle=`rgba(255,100,0,${0.4-i*0.1})`; cx.lineWidth=1; cx.setLineDash([]);
+    cx.beginPath(); cx.arc(cx2,cy2,30+i*8,0,Math.PI*2); cx.stroke();
+  }
+  // Label
+  cx.fillStyle='#f44'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('BLAST ZONE',cx2,H-8);
+  cx.fillStyle='rgba(255,80,80,.5)'; cx.font="6px 'Share Tech Mono',monospace";
+  cx.fillText('R=600',cx2,H-2);
+}
+
+function drawRailCard(){
+  const c=document.getElementById('ncRail'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||110;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#000d18'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  // Grid
+  cx.strokeStyle='rgba(0,200,255,.05)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=12){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=12){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Shooter slime (left)
+  const sx=18,sy=H/2;
+  cx.fillStyle='#39ff14'; cx.beginPath(); cx.arc(sx,sy,10,0,Math.PI*2); cx.fill();
+  cx.fillStyle='rgba(0,0,0,.5)'; cx.font='9px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('😐',sx,sy);
+  // Rail beam
+  const beamGrd=cx.createLinearGradient(sx+10,sy,W-5,sy);
+  beamGrd.addColorStop(0,'rgba(0,255,255,0.95)');
+  beamGrd.addColorStop(0.3,'rgba(0,255,255,0.5)');
+  beamGrd.addColorStop(1,'rgba(0,255,255,0.05)');
+  // Glow outer
+  cx.strokeStyle='rgba(0,200,255,.2)'; cx.lineWidth=8;
+  cx.beginPath(); cx.moveTo(sx+10,sy); cx.lineTo(W-5,sy); cx.stroke();
+  // Core beam
+  cx.strokeStyle='rgba(0,255,255,.95)'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.moveTo(sx+10,sy); cx.lineTo(W-5,sy); cx.stroke();
+  // Impact at right
+  const tx=W-12,ty=H/2;
+  const impGrd=cx.createRadialGradient(tx,ty,0,tx,ty,14);
+  impGrd.addColorStop(0,'rgba(0,255,255,0.9)');
+  impGrd.addColorStop(1,'rgba(0,255,255,0)');
+  cx.fillStyle=impGrd; cx.beginPath(); cx.arc(tx,ty,14,0,Math.PI*2); cx.fill();
+  // Target slime (dead)
+  cx.fillStyle='rgba(255,100,100,.7)'; cx.beginPath(); cx.arc(tx,ty,8,0,Math.PI*2); cx.fill();
+  cx.fillStyle='rgba(0,0,0,.6)'; cx.font='7px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('💀',tx,ty);
+  // Label
+  cx.fillStyle='#00ffff'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('RAILGUN',W/2,H-8);
+  cx.fillStyle='rgba(0,200,200,.5)'; cx.font="6px 'Share Tech Mono',monospace";
+  cx.fillText('HITSCAN',W/2,H-2);
+}
+
+function drawWeaponsCard(){
+  const c=document.getElementById('ncWeapons'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||110;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#0d0f18'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  // Grid
+  cx.strokeStyle='rgba(57,255,20,.04)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=12){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=12){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Weapon icons in a little grid
+  const icons=['🔫','🪃','🗡️','💣','🔥','⚡','🏹','🛡️','🌀'];
+  const cols=3,rows=3,cellW=W/cols,cellH=(H-16)/rows;
+  icons.forEach((ic,i)=>{
+    const col=i%cols, row=Math.floor(i/cols);
+    const x=col*cellW+cellW/2, y=row*cellH+cellH/2+4;
+    // Cell bg
+    cx.fillStyle='rgba(0,40,80,.4)'; cx.strokeStyle='rgba(57,255,20,.1)'; cx.lineWidth=1;
+    cx.beginPath(); cx.rect(col*cellW+2,row*cellH+4,cellW-4,cellH-2); cx.fill(); cx.stroke();
+    cx.font=`${Math.round(cellH*0.45)}px serif`; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText(ic,x,y);
+  });
+  cx.fillStyle='#39ff14'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('22 WEAPONS',W/2,H-3);
+}
+
+function drawArmorCard(){
+  const c=document.getElementById('ncArmor'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||110;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#000d1a'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(51,170,255,.05)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=12){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=12){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Slime with armor glow
+  const mx=W/2, my=H*0.42;
+  const arGrd=cx.createRadialGradient(mx,my,8,mx,my,28);
+  arGrd.addColorStop(0,'rgba(51,170,255,0.35)');
+  arGrd.addColorStop(0.6,'rgba(0,100,200,0.1)');
+  arGrd.addColorStop(1,'rgba(0,0,0,0)');
+  cx.fillStyle=arGrd; cx.beginPath(); cx.arc(mx,my,28,0,Math.PI*2); cx.fill();
+  // Shield ring
+  cx.strokeStyle='rgba(51,170,255,.8)'; cx.lineWidth=2.5; cx.setLineDash([5,4]);
+  cx.beginPath(); cx.arc(mx,my,18,0,Math.PI*2); cx.stroke(); cx.setLineDash([]);
+  // Slime
+  cx.fillStyle='#2266cc'; cx.beginPath(); cx.arc(mx,my,10,0,Math.PI*2); cx.fill();
+  cx.fillStyle='rgba(255,255,255,.8)'; cx.font='9px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('🛡',mx,my);
+  // Bar below: 60% filled
+  const bx=8,by=my+26,bw=W-16,bh=8;
+  cx.fillStyle='rgba(0,0,0,.6)'; cx.strokeStyle='#1a3050'; cx.lineWidth=1;
+  cx.beginPath(); cx.rect(bx,by,bw,bh); cx.fill(); cx.stroke();
+  cx.fillStyle='#3af'; cx.fillRect(bx+1,by+1,Math.round((bw-2)*0.6),bh-2);
+  cx.fillStyle='rgba(255,255,255,.6)'; cx.font="6px 'Share Tech Mono',monospace"; cx.textAlign='center';
+  cx.fillText('60% BLOCKED',W/2,by+bh+8);
+  cx.fillStyle='#3af'; cx.font="bold 7px 'Orbitron',monospace";
+  cx.fillText('ARMOR',W/2,H-2);
+}
+
+function drawStreaksCard(){
+  const c=document.getElementById('ncStreaks'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||110;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#0f0c05'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(249,115,22,.05)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=12){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=12){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Streak icons stacked
+  const streaks=[{ic:'🛰',lbl:'UAV',k:3},{ic:'✈️',lbl:'AIR',k:5},{ic:'☢',lbl:'NUKE',k:8}];
+  const startY=12;
+  streaks.forEach((s,i)=>{
+    const y=startY+i*28;
+    // Row bg
+    cx.fillStyle=s.lbl==='NUKE'?'rgba(255,30,30,.1)':'rgba(0,30,60,.3)';
+    cx.strokeStyle=s.lbl==='NUKE'?'rgba(255,50,50,.3)':'rgba(26,53,80,.4)';
+    cx.lineWidth=1; cx.beginPath(); cx.rect(4,y,W-8,22); cx.fill(); cx.stroke();
+    // Icon
+    cx.font='14px serif'; cx.textAlign='left'; cx.textBaseline='middle';
+    cx.fillText(s.ic,9,y+11);
+    // Label
+    cx.fillStyle=s.lbl==='NUKE'?'#f88':'#8aaabb';
+    cx.font="bold 8px 'Orbitron',monospace"; cx.textAlign='left';
+    cx.fillText(s.lbl,28,y+8);
+    // Kill req bar
+    const bx=28,by=y+14,bw=W-36,bh=4;
+    cx.fillStyle='rgba(0,0,0,.5)'; cx.fillRect(bx,by,bw,bh);
+    const pct=s.k/10;
+    const barGrd=cx.createLinearGradient(bx,0,bx+bw,0);
+    barGrd.addColorStop(0,s.lbl==='NUKE'?'#f44':'#f97316');
+    barGrd.addColorStop(1,s.lbl==='NUKE'?'#f97316':'#fbbf24');
+    cx.fillStyle=barGrd; cx.fillRect(bx,by,Math.round(bw*pct),bh);
+    cx.fillStyle='rgba(255,255,255,.45)'; cx.font="5px 'Share Tech Mono',monospace"; cx.textAlign='right';
+    cx.fillText(s.k+'K',W-6,y+9);
+  });
+  cx.fillStyle='var(--orange)'; cx.fillStyle='#f97316';
+  cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('STREAKS',W/2,H-2);
+}
+
 // Start menu music on first interaction (required by browsers)
 document.addEventListener('click', function startMusicOnce(){
   MUS.startMenu();
