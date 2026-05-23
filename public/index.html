@@ -458,6 +458,39 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="nc-sub">Weapon pickups respawn on map · Control key zones!</div>
       </div>
     </div>
+
+    <!-- SHOTGUN / CLOSE RANGE card -->
+    <div class="nc green-card">
+      <div class="nc-img"><canvas id="ncShotgun" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag weapon">🔥 CLOSE RANGE META</span>
+        <div class="nc-title">SHOTGUN &amp; FLAMETHROWER</div>
+        <div class="nc-text">Shotgun fires a wide spread — devastating inside buildings. Flamethrower sprays continuous fire that <strong style="color:#f97316">burns over time</strong> even after you stop shooting. Don't get cornered.</div>
+        <div class="nc-sub">Flame ticks through armor · Shotgun one-shots at point blank</div>
+      </div>
+    </div>
+
+    <!-- SNIPER / LONG RANGE card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncSniper" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag weapon">🎯 LONG RANGE</span>
+        <div class="nc-title">SNIPER &amp; RAILGUN DUELS</div>
+        <div class="nc-text">Sniper Rifle has <strong style="color:#fbbf24">bullet drop</strong> and travel time — lead your shots. Railgun is hitscan with zero drop but slow reload. Both <strong style="color:#fff">one-tap unarmored</strong> targets.</div>
+        <div class="nc-sub">Open maps favor snipers · Use cover when crossing lanes</div>
+      </div>
+    </div>
+
+    <!-- MINIGUN card -->
+    <div class="nc green-card">
+      <div class="nc-img"><canvas id="ncMinigun" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag weapon">⚡ MINIGUN</span>
+        <div class="nc-title">INFINITE AMMO SUPPRESSOR</div>
+        <div class="nc-text">The Minigun has <strong style="color:#fbbf24">unlimited ammo</strong> and shreds at medium range. Slow spin-up means the first shot takes a moment — but then it's pure chaos. Denies entire corridors.</div>
+        <div class="nc-sub">Spin up before entering fights · Terrible at long range</div>
+      </div>
+    </div>
   </div>
 
   <!-- CENTER: LOGO + NAV -->
@@ -523,6 +556,50 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="nc-title">FFA · TDM · GUN GAME</div>
         <div class="nc-text"><strong style="color:#fa4">FFA</strong>: 30 kills wins. <strong style="color:#3af">TDM</strong>: 50 team kills, auto-balanced teams, friendly fire blocked. <strong style="color:#c09aff">Gun Game</strong>: cycle all 22 weapons — first to finish wins.</div>
         <div class="nc-sub">Up to 12 players per room · Host can force start</div>
+      </div>
+    </div>
+
+    <!-- UAV / CHOPPER scorestreak card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncUAV" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag update">🛰 UAV &amp; CHOPPER</span>
+        <div class="nc-title">INTEL &amp; AIR SUPPORT</div>
+        <div class="nc-text"><strong style="color:#fa4">UAV (3 kills)</strong>: reveals all enemy positions on the minimap for 10s. <strong style="color:#f97316">Chopper (6 kills)</strong>: a helicopter strafe that deals massive area damage along a path you aim.</div>
+        <div class="nc-sub">UAV countered by staying still · Chopper has small delay</div>
+      </div>
+    </div>
+
+    <!-- AIRSTRIKE / CARE PACKAGE card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncAirstrike" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag nuke">✈️ AIRSTRIKE &amp; CARE PKG</span>
+        <div class="nc-title">ORDNANCE &amp; SUPPLY DROP</div>
+        <div class="nc-text"><strong style="color:#f44">Airstrike (5 kills)</strong>: drops a cluster of bombs across a wide zone — marked area before impact. <strong style="color:#3af">Care Package (4 kills)</strong>: drops <strong style="color:#fbbf24">full armor + bonus ammo</strong>. Contest the drop!</div>
+        <div class="nc-sub">Airstrike has 4s warning · Care Package has a flare visible to enemies</div>
+      </div>
+    </div>
+
+    <!-- SENTRY TURRET card -->
+    <div class="nc">
+      <div class="nc-img"><canvas id="ncSentry" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag armor">🤖 SENTRY TURRET</span>
+        <div class="nc-title">AUTOMATED GUN PLATFORM</div>
+        <div class="nc-text">Deploy a sentry that auto-targets nearby enemies for <strong style="color:#fbbf24">15 seconds</strong>. Perfect for holding a zone or covering your back during a push. <strong style="color:#3af">4 kills</strong> to unlock — destroyable but hard to spot.</div>
+        <div class="nc-sub">Place behind cover · Enemies can destroy it · Fires 360°</div>
+      </div>
+    </div>
+
+    <!-- ITCH.IO PROMO card -->
+    <div class="nc" style="border-color:#9750dd;cursor:pointer;" onclick="window.open('https://slimey2017.itch.io/slimeys-battle-royale-online','_blank')" title="Play Slimey's Battle Royale on itch.io">
+      <div class="nc-img"><canvas id="ncItch" width="216" height="90"></canvas></div>
+      <div class="nc-body">
+        <span class="nc-tag" style="background:rgba(151,80,221,.15);border:1px solid #9750dd;color:#c080ff;">🎮 ALSO AVAILABLE</span>
+        <div class="nc-title" style="color:#c080ff;">SLIMEY'S BATTLE ROYALE</div>
+        <div class="nc-text">The original battle royale — <strong style="color:#fbbf24">up to 20 players</strong>, shrinking storm, loot crates, and 3 maps including Slime City (snow). Available on <strong style="color:#c080ff">itch.io</strong> with NA, EU &amp; Asia servers. Downloadable + Mobile!</div>
+        <div class="nc-sub" style="color:#6a4a8a;border-color:rgba(151,80,221,.3);">slimey2017.itch.io · Click to play · Free download</div>
       </div>
     </div>
   </div>
@@ -4272,7 +4349,7 @@ const MUS = (() => {
       if(AC.state==='suspended') AC.resume();
       menuFadeGain=AC.createGain(); menuFadeGain.gain.value=0; menuFadeGain.connect(masterGain);
       menuRunning=true; menuStep=0;
-      fadeTo(menuFadeGain,0.5,1.2); menuBeat();
+      menuFadeGain.gain.value=0.5; menuBeat();
     },
     stopMenu(cb){
       if(!menuRunning){ cb&&cb(); return; }
@@ -4772,6 +4849,14 @@ function drawNewsCards(){
   drawWeaponsCard();
   drawArmorCard();
   drawStreaksCard();
+  drawModesCard();
+  drawShotgunCard();
+  drawSniperCard();
+  drawMinigunCard();
+  drawUAVCard();
+  drawAirstrikeCard();
+  drawSentryCard();
+  drawItchCard();
 }
 
 function ncCtx(id){
@@ -4972,6 +5057,220 @@ function drawStreaksCard(){
   cx.fillStyle='var(--orange)'; cx.fillStyle='#f97316';
   cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
   cx.fillText('STREAKS',W/2,H-2);
+}
+
+function drawModesCard(){
+  const c=document.getElementById('ncModes'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#0a0514'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(120,80,255,.05)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=14){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=14){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  const modes=[{lbl:'FFA',color:'#fa4',icon:'⚔',desc:'30K'},{lbl:'TDM',color:'#3af',icon:'🛡',desc:'50K'},{lbl:'GUN\nGAME',color:'#c09aff',icon:'🔫',desc:'22W'}];
+  const cw=W/3;
+  modes.forEach((m,i)=>{
+    const x=i*cw,cx2=x+cw/2;
+    cx.fillStyle=m.color+'22'; cx.strokeStyle=m.color+'55'; cx.lineWidth=1;
+    cx.beginPath(); cx.rect(x+3,4,cw-6,H-8); cx.fill(); cx.stroke();
+    cx.font=`${Math.round(H*0.35)}px serif`; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText(m.icon,cx2,H*0.38);
+    cx.fillStyle=m.color; cx.font="bold 8px 'Orbitron',monospace"; cx.textBaseline='top';
+    m.lbl.split('\n').forEach((ln,li)=>cx.fillText(ln,cx2,H*0.65+li*9));
+    cx.fillStyle='rgba(255,255,255,.35)'; cx.font="6px 'Share Tech Mono',monospace";
+    cx.fillText(m.desc,cx2,H-5);
+  });
+}
+
+function drawShotgunCard(){
+  const c=document.getElementById('ncShotgun'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#140800'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(249,115,22,.04)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=14){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  // Shotgun barrel
+  cx.strokeStyle='#f97316'; cx.lineWidth=4; cx.lineCap='round';
+  cx.beginPath(); cx.moveTo(W*0.25,H*0.5); cx.lineTo(W*0.65,H*0.5); cx.stroke();
+  cx.lineWidth=7;
+  cx.beginPath(); cx.moveTo(W*0.65,H*0.42); cx.lineTo(W*0.65,H*0.58); cx.stroke();
+  // Pellet spread
+  const spread=[[-18,-16],[-8,-20],[0,-18],[8,-20],[18,-16],[-22,-8],[-12,-10],[0,-9],[12,-10],[22,-8],[-18,0],[-8,2],[0,0],[8,2],[18,0]];
+  spread.forEach(([dx,dy])=>{
+    const alpha=0.3+Math.random()*0.5;
+    cx.fillStyle=`rgba(255,160,40,${alpha})`;
+    cx.beginPath(); cx.arc(W*0.75+dx*0.8,H*0.5+dy*0.9,1.5,0,Math.PI*2); cx.fill();
+  });
+  // Flame at muzzle
+  for(let i=0;i<8;i++){
+    const a=(Math.random()-0.5)*0.8,r=8+Math.random()*12;
+    cx.fillStyle=`rgba(255,${60+Math.floor(Math.random()*100)},0,0.5)`;
+    cx.beginPath(); cx.arc(W*0.68+Math.cos(a)*r,H*0.5+Math.sin(a)*r,2+Math.random()*3,0,Math.PI*2); cx.fill();
+  }
+  cx.fillStyle='#f97316'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('SHOTGUN · FLAMETHROWER',W/2,H-3);
+}
+
+function drawSniperCard(){
+  const c=document.getElementById('ncSniper'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#010a10'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(0,200,255,.04)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=16){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  // Crosshair
+  const mx=W/2,my=H*0.44,r=22;
+  cx.strokeStyle='rgba(0,220,255,.6)'; cx.lineWidth=1;
+  cx.beginPath(); cx.arc(mx,my,r,0,Math.PI*2); cx.stroke();
+  cx.strokeStyle='rgba(0,220,255,.5)'; cx.lineWidth=1;
+  [[-r-6,0,-r+2,0],[r-2,0,r+6,0],[0,-r-6,0,-r+2],[0,r-2,0,r+6]].forEach(([x1,y1,x2,y2])=>{
+    cx.beginPath(); cx.moveTo(mx+x1,my+y1); cx.lineTo(mx+x2,my+y2); cx.stroke();
+  });
+  // Center dot
+  cx.fillStyle='rgba(255,60,60,.9)'; cx.beginPath(); cx.arc(mx,my,2,0,Math.PI*2); cx.fill();
+  // Bullet drop arc
+  cx.strokeStyle='rgba(255,200,0,.3)'; cx.lineWidth=1; cx.setLineDash([3,3]);
+  cx.beginPath(); cx.moveTo(16,H*0.35);
+  for(let x2=16;x2<W-8;x2+=2){const drop=(x2-16)/W*H*0.4; cx.lineTo(x2,H*0.35+drop*drop/H);}
+  cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle='#7af'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('SNIPER · RAILGUN',W/2,H-3);
+}
+
+function drawMinigunCard(){
+  const c=document.getElementById('ncMinigun'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#0a0f00'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  // Spinning barrels
+  const t=Date.now()/200, mx=W*0.38, my=H*0.46, rr=12;
+  for(let i=0;i<6;i++){
+    const a=t+i*(Math.PI*2/6);
+    const bx=mx+Math.cos(a)*rr, by=my+Math.sin(a)*rr;
+    cx.fillStyle='rgba(57,255,20,0.6)'; cx.beginPath(); cx.arc(bx,by,3,0,Math.PI*2); cx.fill();
+    cx.strokeStyle='rgba(57,255,20,.3)'; cx.lineWidth=1.5;
+    cx.beginPath(); cx.moveTo(mx,my); cx.lineTo(bx,by); cx.stroke();
+  }
+  // Tracer bullets flying right
+  for(let i=0;i<5;i++){
+    const bx=mx+20+i*22, by=my+(Math.random()-0.5)*10;
+    cx.fillStyle=`rgba(255,230,0,${0.6-i*0.1})`; cx.beginPath(); cx.ellipse(bx,by,5,1.5,0,0,Math.PI*2); cx.fill();
+  }
+  cx.fillStyle='#39ff14'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('MINIGUN · INFINITE AMMO',W/2,H-3);
+}
+
+function drawUAVCard(){
+  const c=document.getElementById('ncUAV'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#010810'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(250,160,0,.04)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=14){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  // UAV radar pulse
+  const rx=W*0.3,ry=H*0.45;
+  for(let i=3;i>0;i--){
+    cx.strokeStyle=`rgba(0,220,150,${0.15*i})`; cx.lineWidth=1;
+    cx.beginPath(); cx.arc(rx,ry,i*12,0,Math.PI*2); cx.stroke();
+  }
+  cx.fillStyle='#0fd'; cx.font='18px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('🛰',rx,ry);
+  // Dots for revealed enemies
+  [[W*0.6,H*0.3],[W*0.7,H*0.55],[W*0.55,H*0.65]].forEach(([ex,ey])=>{
+    cx.fillStyle='rgba(255,60,60,.85)'; cx.beginPath(); cx.arc(ex,ey,4,0,Math.PI*2); cx.fill();
+    cx.strokeStyle='rgba(255,60,60,.3)'; cx.lineWidth=1; cx.beginPath(); cx.arc(ex,ey,8,0,Math.PI*2); cx.stroke();
+  });
+  cx.fillStyle='#fa4'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center'; cx.textBaseline='alphabetic';
+  cx.fillText('UAV · CHOPPER GUNNER',W/2,H-3);
+}
+
+function drawAirstrikeCard(){
+  const c=document.getElementById('ncAirstrike'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#120505'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  // Bomb trails
+  const bombs=[[W*0.2,0,W*0.25,H*0.7],[W*0.4,0,W*0.45,H*0.6],[W*0.6,0,W*0.65,H*0.8],[W*0.8,0,W*0.78,H*0.65]];
+  bombs.forEach(([x1,y1,x2,y2])=>{
+    cx.strokeStyle='rgba(255,100,0,.35)'; cx.lineWidth=1; cx.setLineDash([4,3]);
+    cx.beginPath(); cx.moveTo(x1,y1); cx.lineTo(x2,y2); cx.stroke(); cx.setLineDash([]);
+    // Explosion
+    const gr=cx.createRadialGradient(x2,y2,0,x2,y2,14);
+    gr.addColorStop(0,'rgba(255,200,50,.7)'); gr.addColorStop(0.5,'rgba(255,80,0,.4)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    cx.fillStyle=gr; cx.beginPath(); cx.arc(x2,y2,14,0,Math.PI*2); cx.fill();
+  });
+  cx.fillStyle='#f44'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center';
+  cx.fillText('AIRSTRIKE · CARE PACKAGE',W/2,H-3);
+}
+
+function drawSentryCard(){
+  const c=document.getElementById('ncSentry'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#000d1a'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(51,170,255,.04)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=14){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  // Sentry body
+  const sx=W*0.38,sy=H*0.52;
+  cx.fillStyle='#1a3050'; cx.strokeStyle='#3af'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.rect(sx-14,sy-10,28,20); cx.fill(); cx.stroke();
+  // Barrel
+  const angle=-0.4;
+  cx.strokeStyle='#3af'; cx.lineWidth=3; cx.lineCap='round';
+  cx.beginPath(); cx.moveTo(sx,sy); cx.lineTo(sx+Math.cos(angle)*22,sy+Math.sin(angle)*22); cx.stroke();
+  // Scan arc
+  cx.strokeStyle='rgba(51,170,255,.25)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(sx,sy); cx.arc(sx,sy,50,-0.9,0.1); cx.closePath(); cx.stroke();
+  // Enemy dot in arc
+  cx.fillStyle='rgba(255,60,60,.8)'; cx.beginPath(); cx.arc(sx+40,sy-12,4,0,Math.PI*2); cx.fill();
+  // Tracer
+  cx.strokeStyle='rgba(51,170,255,.6)'; cx.lineWidth=1; cx.setLineDash([3,2]);
+  cx.beginPath(); cx.moveTo(sx+Math.cos(angle)*22,sy+Math.sin(angle)*22); cx.lineTo(sx+40,sy-12); cx.stroke(); cx.setLineDash([]);
+  cx.fillStyle='#3af'; cx.font="bold 7px 'Orbitron',monospace"; cx.textAlign='center'; cx.textBaseline='alphabetic';
+  cx.fillText('SENTRY TURRET · AUTO-AIM',W/2,H-3);
+}
+
+function drawItchCard(){
+  const c=document.getElementById('ncItch'); if(!c)return;
+  c.height=c.parentElement.offsetHeight||90;
+  const cx=c.getContext('2d'),W=c.width,H=c.height;
+  const bg=cx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#0d0518'); bg.addColorStop(1,'#0d1520');
+  cx.fillStyle=bg; cx.fillRect(0,0,W,H);
+  cx.strokeStyle='rgba(151,80,221,.06)'; cx.lineWidth=1;
+  for(let x=0;x<W;x+=16){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,H);cx.stroke();}
+  for(let y=0;y<H;y+=16){cx.beginPath();cx.moveTo(0,y);cx.lineTo(W,y);cx.stroke();}
+  // Storm shrink visual
+  const mx=W/2,my=H*0.46;
+  for(let i=4;i>0;i--){
+    cx.strokeStyle=`rgba(151,80,221,${0.12*i})`; cx.lineWidth=i;
+    cx.beginPath(); cx.arc(mx,my,i*10,0,Math.PI*2); cx.stroke();
+  }
+  // Slime character in center
+  const grd=cx.createRadialGradient(mx,my,2,mx,my,12);
+  grd.addColorStop(0,'#c080ff'); grd.addColorStop(1,'#6020aa');
+  cx.fillStyle=grd; cx.beginPath(); cx.arc(mx,my,11,0,Math.PI*2); cx.fill();
+  cx.fillStyle='rgba(255,255,255,.8)'; cx.font='9px serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText('👾',mx,my);
+  // Players count
+  cx.fillStyle='rgba(200,150,255,.5)'; cx.font="6px 'Share Tech Mono',monospace"; cx.textBaseline='alphabetic';
+  cx.fillText('UP TO 20 PLAYERS',W/2,H*0.82);
+  cx.fillStyle='#c080ff'; cx.font="bold 7px 'Orbitron',monospace";
+  cx.fillText('SLIMEY\'S BATTLE ROYALE',W/2,H-3);
 }
 
 // Start menu music on first interaction (required by browsers)
