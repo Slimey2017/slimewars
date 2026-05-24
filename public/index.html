@@ -180,8 +180,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .attach-stat{font-size:9px;color:#3a6a8a;margin-top:4px;}
 
 /* GAME HUD */
-#sGame{position:relative;}
-#gameCanvas{display:block;width:100%;height:100%;}
+#sGame{position:relative;cursor:crosshair;}
+#gameCanvas{display:block;width:100%;height:100%;cursor:crosshair;}
 .hud{position:absolute;pointer-events:none;}
 
 /* HP & Armor */
@@ -279,11 +279,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .sb-kd{width:40px;text-align:right;color:#6a9aaa;font-size:10px;}
 
 /* Chat */
-#gchat{position:absolute;bottom:88px;left:18px;width:260px;pointer-events:auto;}
-#gchatMsgs{max-height:90px;overflow:hidden;display:flex;flex-direction:column;gap:2px;margin-bottom:4px;}
-.gcm{font-size:10px;background:rgba(0,0,0,.7);padding:2px 5px;color:#888;}
-.gcm .gcn{color:#3af;margin-right:4px;}
-#gchatInput{width:100%;padding:4px 7px;background:rgba(0,0,0,.75);border:1px solid var(--border);color:var(--text);font-family:'Share Tech Mono';font-size:11px;outline:none;display:none;}
+#gchat{position:absolute;bottom:88px;left:18px;width:280px;pointer-events:auto;}
+#gchatMsgs{max-height:110px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin-bottom:4px;}
+#gchatMsgs::-webkit-scrollbar{width:3px;}
+#gchatMsgs::-webkit-scrollbar-thumb{background:#1a3050;}
+.gcm{font-size:10px;background:rgba(0,0,0,.72);padding:3px 6px;color:#aac;border-left:2px solid transparent;animation:gcmFadeIn .2s ease;}
+.gcm.gcm-self{border-left-color:#3af;}
+.gcm.gcm-server{border-left-color:#39ff14;color:#8df;}
+.gcm .gcn{color:#3af;margin-right:4px;font-weight:bold;}
+.gcm.gcm-self .gcn{color:#ffe000;}
+@keyframes gcmFadeIn{from{opacity:0;transform:translateX(-4px);}to{opacity:1;transform:translateX(0);}}
+#gchatInput{width:100%;padding:5px 8px;background:rgba(0,0,0,.82);border:1px solid #3af;border-top:none;color:var(--text);font-family:'Share Tech Mono';font-size:11px;outline:none;display:none;box-sizing:border-box;}
 #gchatInput.active{display:block;}
 
 /* ADS overlay */
@@ -298,6 +304,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 /* Notification */
 #hudNotif{position:absolute;top:80px;left:50%;transform:translateX(-50%);font-family:'Orbitron';font-size:13px;color:var(--orange);text-shadow:0 0 20px rgba(249,115,22,.6);opacity:0;transition:opacity .3s;pointer-events:none;letter-spacing:3px;}
 #hudNotif.show{opacity:1;}
+
+/* Kill streak announcement */
+#hudStreakAnnounce{position:absolute;top:130px;left:50%;transform:translateX(-50%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:60;}
+.streak-announce{font-family:'Fredoka One',cursive;font-size:28px;color:#fff;text-shadow:0 0 30px rgba(255,100,0,.9),0 2px 0 rgba(0,0,0,.8);animation:streakAnnounce 2.5s forwards;white-space:nowrap;letter-spacing:2px;}
+.streak-announce.mega{font-size:36px;color:#ffe000;text-shadow:0 0 40px rgba(255,200,0,.9),0 2px 0 rgba(0,0,0,.8);}
+@keyframes streakAnnounce{0%{opacity:0;transform:scale(.7) translateY(10px);}15%{opacity:1;transform:scale(1.1) translateY(0);}25%{transform:scale(1);}75%{opacity:1;}100%{opacity:0;transform:translateY(-20px);}}
 
 /* Damage vignette */
 #hudVignette{position:absolute;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 50%,rgba(255,30,30,.6) 100%);transition:opacity .1s;}
@@ -317,6 +329,50 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #hudGunGame{position:absolute;top:56px;left:50%;transform:translateX(-50%);background:rgba(5,12,25,.85);border:1px solid var(--orange);padding:4px 18px;text-align:center;pointer-events:none;}
 .gg-weapon{font-family:'Orbitron';font-size:13px;color:var(--orange);letter-spacing:2px;}
 .gg-progress{font-size:9px;color:#6a8aaa;letter-spacing:2px;margin-top:1px;}
+
+/* ── XP / Level HUD ────────────────────────────────────── */
+#hudXP{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);pointer-events:none;text-align:center;z-index:10;}
+.xp-level{font-family:'Orbitron';font-size:9px;color:var(--orange);letter-spacing:2px;margin-bottom:1px;}
+.xp-bar-wrap{width:200px;height:4px;background:rgba(0,0,0,.7);border:1px solid #1a3050;border-radius:2px;overflow:hidden;margin:0 auto;}
+.xp-bar-fill{height:100%;background:linear-gradient(90deg,#f97316,#fbbf24);border-radius:2px;transition:width .4s ease;}
+#hudXpPopup{position:absolute;bottom:80px;left:50%;transform:translateX(-50%);font-family:'Orbitron';font-size:12px;color:#fbbf24;letter-spacing:2px;opacity:0;pointer-events:none;white-space:nowrap;text-shadow:0 0 20px rgba(251,191,36,.8);}
+#hudXpPopup.show{animation:xpFloat 2s forwards;}
+@keyframes xpFloat{0%{opacity:0;transform:translateX(-50%) translateY(0);}20%{opacity:1;}80%{opacity:1;}100%{opacity:0;transform:translateX(-50%) translateY(-30px);}}
+#hudLvlUp{position:absolute;top:45%;left:50%;transform:translate(-50%,-50%);font-family:'Fredoka One',cursive;font-size:52px;color:#fbbf24;text-shadow:0 0 40px rgba(251,191,36,.9),0 4px 0 rgba(0,0,0,.6);opacity:0;pointer-events:none;z-index:200;letter-spacing:4px;white-space:nowrap;display:none;}
+#hudLvlUp.show{display:block;animation:lvlUpPop 2.8s forwards;}
+@keyframes lvlUpPop{0%{opacity:0;transform:translate(-50%,-50%) scale(.5);}18%{opacity:1;transform:translate(-50%,-50%) scale(1.15);}28%{transform:translate(-50%,-50%) scale(1);}72%{opacity:1;}100%{opacity:0;transform:translate(-50%,-50%) scale(1.2);}}
+
+/* ── Match History Screen ───────────────────────────────── */
+#sHistory{flex-direction:column;padding:30px;gap:14px;background:#0d1520;overflow-y:auto;}
+.hist-table{width:100%;max-width:700px;margin:0 auto;border-collapse:collapse;}
+.hist-table th{text-align:left;padding:6px 12px;color:#3a6a8a;font-size:10px;letter-spacing:2px;border-bottom:1px solid var(--border);}
+.hist-table td{padding:9px 12px;border-bottom:1px solid rgba(26,53,80,.3);font-size:12px;}
+.hist-win{color:#39ff14;font-weight:bold;}.hist-loss{color:#f44;font-weight:bold;}.hist-draw{color:#fa4;}
+.hist-empty{text-align:center;color:#3a6a8a;padding:40px;font-size:12px;letter-spacing:2px;}
+
+/* ── Host Controls Panel ────────────────────────────────── */
+#hostControls{display:none;background:rgba(5,15,35,.95);border:1px solid var(--orange);border-radius:4px;padding:12px 16px;margin-top:8px;flex-direction:column;gap:8px;}
+#hostControls.vis{display:flex;}
+.hc-title{font-family:'Orbitron';font-size:11px;color:var(--orange);letter-spacing:2px;margin-bottom:4px;}
+.hc-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.hc-lbl{font-size:10px;color:#4a7a9a;letter-spacing:1px;min-width:60px;}
+.hc-btn{padding:4px 10px;background:rgba(0,0,0,.5);border:1px solid #2a4060;color:#aac;font-family:'Share Tech Mono';font-size:10px;cursor:pointer;letter-spacing:1px;border-radius:2px;}
+.hc-btn:hover{border-color:var(--orange);color:var(--orange);}
+.hc-kick-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;}
+.hc-kick{padding:3px 8px;font-size:9px;background:rgba(255,0,0,.1);border:1px solid #f44;color:#f88;cursor:pointer;border-radius:2px;font-family:'Share Tech Mono';letter-spacing:1px;}
+.hc-kick:hover{background:rgba(255,0,0,.2);}
+
+/* ── Dash/Roll indicator ────────────────────────────────── */
+#hudDash{position:absolute;bottom:148px;right:18px;font-size:9px;color:#3af;letter-spacing:2px;display:none;text-align:right;pointer-events:none;}
+#hudDash.vis{display:block;}
+.dash-bar-wrap{width:80px;height:4px;background:rgba(0,0,0,.7);border:1px solid #1a3050;margin-top:2px;margin-left:auto;}
+.dash-bar-fill{height:100%;background:linear-gradient(90deg,#3af,#0cf);transition:width .1s;}
+
+/* ── Kill streak announcement ──────────────────────────── */
+#hudStreakAnnounce{position:absolute;top:130px;left:50%;transform:translateX(-50%);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:60;}
+.streak-announce{font-family:'Fredoka One',cursive;font-size:28px;color:#fff;text-shadow:0 0 30px rgba(255,100,0,.9),0 2px 0 rgba(0,0,0,.8);animation:streakAnnounce 2.5s forwards;white-space:nowrap;letter-spacing:2px;}
+.streak-announce.mega{font-size:36px;color:#ffe000;text-shadow:0 0 40px rgba(255,200,0,.9),0 2px 0 rgba(0,0,0,.8);}
+@keyframes streakAnnounce{0%{opacity:0;transform:scale(.7) translateY(10px);}15%{opacity:1;transform:scale(1.1) translateY(0);}25%{transform:scale(1);}75%{opacity:1;}100%{opacity:0;transform:translateY(-20px);}}
 
 /* ── MVP card overlay ──────────────────────────────────── */
 #mvpCard{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);align-items:center;justify-content:center;z-index:500;flex-direction:column;gap:0;}
@@ -507,6 +563,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <button class="menu-btn" onclick="startSoloPractice()">🤖 SOLO PRACTICE</button>
       <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
       <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
+      <button class="menu-btn" onclick="openMatchHistory()">📊 MATCH HISTORY</button>
       <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
       <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
     </div>
@@ -607,6 +664,16 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   <div class="menu-status">SERVER: <span class="online">ONLINE</span> &nbsp;|&nbsp; ONLINE: <span class="count" id="onlinePcount">0</span> &nbsp;|&nbsp; <span id="menuMuteBtn" onclick="toggleMute()" style="cursor:pointer;color:#39ff14;letter-spacing:2px;">🔊 MUSIC</span></div>
 </div>
 
+<!-- MATCH HISTORY -->
+<div id="sHistory" class="screen">
+  <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:720px;border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:10px;">
+    <div class="screen-title" style="font-family:'Orbitron';font-size:22px;color:var(--orange);letter-spacing:3px;">⚔ MATCH HISTORY</div>
+    <button class="btn sm" onclick="showScreen('sMenu')">← BACK</button>
+  </div>
+  <div id="histContent" style="width:100%;max-width:720px;"></div>
+</div>
+
+
 <!-- SERVER BROWSER -->
 <div id="sBrowser" class="screen">
   <div style="padding:28px;display:flex;flex-direction:column;gap:12px;width:100%;height:100%;box-sizing:border-box;">
@@ -668,6 +735,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   </div>
 </div>
 
+  </div>
+</div>
+
 <!-- SCORESTREAK SELECT -->
 <div id="sStreakSelect" class="screen">
   <div class="streak-title">SCORESTREAK SELECTION</div>
@@ -709,7 +779,21 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <span class="plcount" id="readyCount">0/0 ready</span>
     <button class="btn sm" id="forceStartBtn" onclick="forceStart()" style="display:none;border-color:#f97316;color:#f97316;">▶ FORCE START</button>
     <button class="btn sm" id="switchTeamBtn" onclick="switchTeam()" style="display:none;border-color:#3af;color:#3af;">⇄ SWITCH TEAM</button>
+    <button class="btn sm" id="hostControlsBtn" onclick="toggleHostControls()" style="display:none;border-color:var(--orange);color:var(--orange);">⚙ HOST</button>
     <button class="btn" id="readyBtn" onclick="toggleReady()">READY UP</button>
+  </div>
+  <!-- Host controls panel -->
+  <div id="hostControls" style="grid-column:1/-1;">
+    <div class="hc-title">⚙ HOST CONTROLS</div>
+    <div class="hc-row">
+      <span class="hc-lbl">MAP VOTE</span>
+      <button class="hc-btn" onclick="hostVoteMap('city')">🏙️ CITY</button>
+      <button class="hc-btn" onclick="hostVoteMap('forest')">🌲 FOREST</button>
+    </div>
+    <div class="hc-row">
+      <span class="hc-lbl">KICK PLAYER</span>
+      <div class="hc-kick-row" id="hostKickList"></div>
+    </div>
   </div>
 </div>
 
@@ -735,7 +819,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="set-row"><div><div class="set-lbl">ENABLE NUKE (8-kill streak)</div><div class="set-sub">Players can call a nuclear strike after 8 kills</div></div><div class="toggle on" id="tgNuke" onclick="this.classList.toggle('on');nukeEnabled=this.classList.contains('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">COLORBLIND MODE</div><div class="set-sub">Replaces red/blue teams with yellow/purple</div></div><div class="toggle" id="tgColorblind" onclick="this.classList.toggle('on');applyColorblindMode(this.classList.contains('on'));saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">PERFORMANCE MODE</div><div class="set-sub">Disables particles & effects (better FPS)</div></div><div class="toggle" id="tgPerf" onclick="this.classList.toggle('on');saveSettings()"></div></div>
-    <div class="set-row"><div><div class="set-lbl">MOBILE CONTROLS</div><div class="set-sub">Show virtual joystick and buttons</div></div><div class="toggle" id="tgMobile" onclick="this.classList.toggle('on');toggleMobileControls(this.classList.contains('on'));saveSettings()"></div></div>
+
     <!-- Crosshair -->
     <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
       <div class="set-lbl">CROSSHAIR STYLE</div>
@@ -907,6 +991,23 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
   <!-- Online status / ping -->
   <div id="hudPing" style="display:none;position:absolute;top:16px;left:170px;font-size:10px;color:#2a4a6a;letter-spacing:1px;"></div>
 
+  <!-- Kill streak announcements -->
+  <div id="hudStreakAnnounce"></div>
+
+  <!-- XP bar -->
+  <div id="hudXP">
+    <div class="xp-level" id="xpLevelLabel">LVL 1 · 0 / 200 XP</div>
+    <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpBarFill" style="width:0%"></div></div>
+  </div>
+  <div id="hudXpPopup"></div>
+  <div id="hudLvlUp">⬆ LEVEL UP!</div>
+
+  <!-- Dash cooldown -->
+  <div id="hudDash">
+    <div>⚡ DASH [SPACE]</div>
+    <div class="dash-bar-wrap"><div class="dash-bar-fill" id="dashBarFill" style="width:100%"></div></div>
+  </div>
+
   <!-- Tree hide status (forest map only) -->
   <div id="hudTreeHide" style="display:none;position:absolute;bottom:165px;left:50%;transform:translateX(-50%);font-family:'Share Tech Mono';font-size:12px;letter-spacing:2px;background:rgba(0,0,0,.7);padding:4px 12px;border:1px solid #2a4a2a;border-radius:2px;pointer-events:none;"></div>
 
@@ -926,6 +1027,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="hk-row"><span class="hk-key">SHIFT</span><span class="hk-desc">Sprint</span></div>
         <div class="hk-row"><span class="hk-key">RMB / Q</span><span class="hk-desc">ADS</span></div>
         <div class="hk-row"><span class="hk-key">C</span><span class="hk-desc">Slide</span></div>
+        <div class="hk-row"><span class="hk-key">SPACE</span><span class="hk-desc">Dash / Dodge Roll</span></div>
         <div class="hk-row"><span class="hk-key">R</span><span class="hk-desc">Reload</span></div>
         <div class="hk-row"><span class="hk-key">1-5</span><span class="hk-desc">Weapons</span></div>
         <div class="hk-row"><span class="hk-key">F / G</span><span class="hk-desc">Scorestreaks</span></div>
@@ -1095,6 +1197,11 @@ function handleServerMsg(msg) {
 
     case 'mode_changed':
       lockLobbyMode(msg.mode);
+      break;
+
+    case 'map_changed':
+      currentPendingMap = msg.map || 'city';
+      addLobbyMsg('SERVER', `Map changed to: ${(msg.map||'city').toUpperCase()}`);
       break;
 
     case 'start_countdown':
@@ -4151,7 +4258,12 @@ function startGameFromLobby(){
       const sp=getSpawnPoint([G.player,...G.npcs]);
       const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
       const npc=createNPC(sp.x,sp.y,team);
-      if(i<lobbyPlayers.length){npc.name=lobbyPlayers[i].name;npc.skin=lobbyPlayers[i].skin;}
+      if(i<lobbyPlayers.length){
+        npc.name=lobbyPlayers[i].name;
+        npc.skin=lobbyPlayers[i].skin;
+        // Apply forced skill from solo practice difficulty
+        if(lobbyPlayers[i]._forcedSkill !== undefined) npc.skill = lobbyPlayers[i]._forcedSkill;
+      }
       G.npcs.push(npc);
       G.scores[npc.name]={k:0,d:0,score:0};
     }
@@ -4244,9 +4356,121 @@ function quickJoinOnline(){
   showScreen('sStreakSelect');
 }
 
-function startSoloPractice(){  lobbyPlayers=[];
-  for(let i=0;i<11;i++) lobbyPlayers.push({name:NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],skin:Math.floor(Math.random()*BODY_COLORS.length),ready:true,isNPC:true});
-  gameMode='ffa'; G.mode='ffa'; G.scoreLimit=20;
+// ─── SOLO PRACTICE SETUP ─────────────────────────────────────────
+let _soloSettings = { map: 'city', mode: 'ffa', difficulty: 'medium' };
+
+function startSoloPractice(){
+  // Show the solo setup modal instead of jumping straight in
+  openSoloModal();
+}
+
+function openSoloModal(){
+  const existing = document.getElementById('soloModal');
+  if(existing){ existing.style.display='flex'; refreshSoloModal(); return; }
+  const modal = document.createElement('div');
+  modal.id = 'soloModal';
+  modal.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,.82);align-items:center;justify-content:center;z-index:900;';
+  modal.innerHTML = `
+    <div style="background:linear-gradient(160deg,#0d1e38,#0a1520);border:2px solid var(--orange);border-radius:8px;padding:36px 44px;min-width:440px;max-width:520px;display:flex;flex-direction:column;gap:18px;">
+      <div style="font-family:'Orbitron';font-size:22px;color:var(--orange);letter-spacing:3px;">🤖 SOLO PRACTICE</div>
+      
+      <div>
+        <div style="font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">MAP</div>
+        <div id="soloMapBtns" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="crm-pill on" data-val="city" onclick="setSoloPick('map','city',this)">🏙️ CITY</button>
+          <button class="crm-pill" data-val="forest" onclick="setSoloPick('map','forest',this)">🌲 FOREST</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">GAME MODE</div>
+        <div id="soloModeBtns" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="crm-pill on" data-val="ffa" onclick="setSoloPick('mode','ffa',this)">⚔️ FFA</button>
+          <button class="crm-pill" data-val="tdm" onclick="setSoloPick('mode','tdm',this)">🛡️ TDM</button>
+          <button class="crm-pill" data-val="gungame" onclick="setSoloPick('mode','gungame',this)">🔫 GUN GAME</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">BOT DIFFICULTY</div>
+        <div id="soloDiffBtns" style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="crm-pill" data-val="easy" onclick="setSoloPick('difficulty','easy',this)">😴 EASY</button>
+          <button class="crm-pill on" data-val="medium" onclick="setSoloPick('difficulty','medium',this)">🎯 MEDIUM</button>
+          <button class="crm-pill" data-val="hard" onclick="setSoloPick('difficulty','hard',this)">💀 HARD</button>
+          <button class="crm-pill" data-val="insane" onclick="setSoloPick('difficulty','insane',this)">☠️ INSANE</button>
+        </div>
+      </div>
+
+      <div style="background:rgba(0,0,0,.3);border:1px solid #1e3050;border-radius:4px;padding:10px 14px;font-size:11px;color:#4a7a9a;line-height:1.7;" id="soloDiffDesc">
+        🎯 MEDIUM — Balanced bots with decent aim and movement.
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button class="btn" style="flex:2;" onclick="launchSoloPractice()">▶ START PRACTICE</button>
+        <button class="btn red" style="flex:1;" onclick="document.getElementById('soloModal').style.display='none'">✕ CANCEL</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  refreshSoloModal();
+}
+
+const SOLO_DIFF_DESC = {
+  easy:   '😴 EASY — Bots move slowly and have poor aim. Great for learning.',
+  medium: '🎯 MEDIUM — Balanced bots with decent aim and movement.',
+  hard:   '💀 HARD — Aggressive bots with sharp aim and smart cover.',
+  insane: '☠️ INSANE — Near-perfect aim, rush tactics, no mercy.',
+};
+
+function refreshSoloModal(){
+  ['soloMapBtns','soloModeBtns','soloDiffBtns'].forEach(groupId => {
+    const group = document.getElementById(groupId);
+    if(!group) return;
+    const key = groupId.replace('solo','').replace('Btns','').toLowerCase();
+    group.querySelectorAll('.crm-pill').forEach(b => {
+      b.classList.toggle('on', b.dataset.val === _soloSettings[key]);
+    });
+  });
+  const desc = document.getElementById('soloDiffDesc');
+  if(desc) desc.textContent = SOLO_DIFF_DESC[_soloSettings.difficulty] || '';
+}
+
+function setSoloPick(key, val, btn){
+  _soloSettings[key] = val;
+  const groupMap = {map:'soloMapBtns',mode:'soloModeBtns',difficulty:'soloDiffBtns'};
+  const group = document.getElementById(groupMap[key]);
+  if(group) group.querySelectorAll('.crm-pill').forEach(b => b.classList.toggle('on', b === btn));
+  const desc = document.getElementById('soloDiffDesc');
+  if(desc && key==='difficulty') desc.textContent = SOLO_DIFF_DESC[val] || '';
+}
+
+const SOLO_BOT_SKILL = { easy: 0.05, medium: 0.45, hard: 0.78, insane: 0.98 };
+const SOLO_BOT_COUNT = { easy: 7, medium: 11, hard: 11, insane: 11 };
+
+function launchSoloPractice(){
+  const modal = document.getElementById('soloModal');
+  if(modal) modal.style.display = 'none';
+
+  // Ensure we're fully offline (no socket room)
+  currentRoomId = null;
+  remotePlayers = {};
+
+  const diff = _soloSettings.difficulty;
+  const skill = SOLO_BOT_SKILL[diff] || 0.45;
+  const botCount = SOLO_BOT_COUNT[diff] || 11;
+
+  lobbyPlayers = [];
+  const used = new Set();
+  for(let i=0; i<botCount; i++){
+    let nm; do { nm = NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)]; } while(used.has(nm));
+    used.add(nm);
+    lobbyPlayers.push({ name:nm, skin:Math.floor(Math.random()*BODY_COLORS.length), ready:true, isNPC:true, _forcedSkill:skill });
+  }
+
+  gameMode = _soloSettings.mode;
+  G.mode   = _soloSettings.mode;
+  G.scoreLimit = _soloSettings.mode==='tdm' ? 50 : _soloSettings.mode==='gungame' ? 22 : 20;
+  currentPendingMap = _soloSettings.map;
+
   startGameFromLobby();
 }
 
@@ -4408,7 +4632,7 @@ function saveSettings(){
       nuke: document.getElementById('tgNuke')?.classList.contains('on'),
       colorblind: document.getElementById('tgColorblind')?.classList.contains('on'),
       perf: document.getElementById('tgPerf')?.classList.contains('on'),
-      mobile: document.getElementById('tgMobile')?.classList.contains('on'),
+      mobile: false,
       xhairStyle: xhairStyle,
       xhairColor: xhairColor,
       username: playerName,
@@ -4439,11 +4663,11 @@ function loadSettings(){
     setToggle('tgNuke', s.nuke !== false);
     setToggle('tgColorblind', !!s.colorblind);
     setToggle('tgPerf', !!s.perf);
-    setToggle('tgMobile', !!s.mobile);
+    // mobile controls removed
     if (s.xhairStyle !== undefined) xhairStyle = s.xhairStyle;
     if (s.xhairColor) xhairColor = s.xhairColor;
     if (s.colorblind) applyColorblindMode(true);
-    if (s.mobile) toggleMobileControls(true);
+    // mobile controls removed
     if (s.nuke !== false) nukeEnabled = true; else nukeEnabled = false;
     if (s.username) {
       playerName = s.username;
@@ -5274,6 +5498,549 @@ function drawItchCard(){
 }
 
 // Start menu music on first interaction (required by browsers)
+// ═══════════════════════════════════════════════════════════════════
+// ─── NEW FEATURES ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── XP / LEVEL SYSTEM ────────────────────────────────────────────
+const XP_PER_LEVEL = [0,200,400,700,1100,1600,2200,3000,4000,5200,6600];
+function xpForLevel(lvl){ return XP_PER_LEVEL[Math.min(lvl, XP_PER_LEVEL.length-1)] || (lvl*1200); }
+
+function loadXP(){
+  try { return JSON.parse(localStorage.getItem('slimeWarsXP')) || {xp:0,level:1}; }
+  catch(e){ return {xp:0,level:1}; }
+}
+function saveXP(d){ try { localStorage.setItem('slimeWarsXP', JSON.stringify(d)); } catch(e){} }
+
+let _xpData = loadXP();
+
+function awardXP(amount, label){
+  if(!amount) return;
+  const prev = {..._xpData};
+  _xpData.xp += amount;
+  // Check level up
+  while(_xpData.xp >= xpForLevel(_xpData.level)){
+    _xpData.xp -= xpForLevel(_xpData.level);
+    _xpData.level++;
+    // Level up fanfare
+    const lu = document.getElementById('hudLvlUp');
+    if(lu){ lu.classList.remove('show'); void lu.offsetWidth; lu.textContent=`⬆ LEVEL ${_xpData.level}!`; lu.classList.add('show'); setTimeout(()=>lu.classList.remove('show'),2800); }
+    // Unlock cosmetics every 5 levels (informational for now)
+    if(_xpData.level % 5 === 0) showNotif(`🎉 LEVEL ${_xpData.level} — NEW COSMETICS!`, 3000);
+    SND.streak_ready && SND.streak_ready();
+  }
+  saveXP(_xpData);
+  updateXPHUD();
+  // Show floating XP popup
+  if(label){
+    const el = document.getElementById('hudXpPopup');
+    if(el){ el.textContent=`+${amount} XP  ${label}`; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
+  }
+}
+
+function updateXPHUD(){
+  const lbl = document.getElementById('xpLevelLabel');
+  const bar = document.getElementById('xpBarFill');
+  if(!lbl || !bar) return;
+  const needed = xpForLevel(_xpData.level);
+  lbl.textContent = `LVL ${_xpData.level}  ·  ${_xpData.xp} / ${needed} XP`;
+  bar.style.width = `${Math.min(100, (_xpData.xp/needed)*100)}%`;
+}
+
+// Hook into kill events to award XP
+const _origKillEntity = killEntity;
+window.killEntity = function(killer, victim){
+  _origKillEntity(killer, victim);
+  if(killer && killer.isPlayer){
+    awardXP(50, 'KILL');
+    triggerKillStreak(killer.name || playerName);
+  }
+};
+
+// Award XP on game end
+const _origEndGame = endGame;
+window.endGame = function(winner){
+  _origEndGame(winner);
+  const isWinner = (winner === playerName || winner === 'BLUE TEAM' && G.player?.team===0 || winner === 'RED TEAM' && G.player?.team===1);
+  if(isWinner) awardXP(200, 'WIN BONUS');
+  awardXP(25 * (G.player?.kills||0), 'MATCH XP');
+  saveMatchHistory(winner);
+};
+
+// ─── MATCH HISTORY ────────────────────────────────────────────────
+function saveMatchHistory(winner){
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem('slimeWarsHistory')) || []; } catch(e){}
+  const isWin = winner === playerName || (winner==='BLUE TEAM' && G.player?.team===0) || (winner==='RED TEAM' && G.player?.team===1);
+  const entry = {
+    date: new Date().toLocaleDateString(),
+    mode: (gameMode||'ffa').toUpperCase(),
+    result: isWin ? 'WIN' : (winner==='DRAW'?'DRAW':'LOSS'),
+    kills: G.player?.kills || 0,
+    deaths: G.player?.deaths || 0,
+    winner,
+    duration: Math.round((G.gameTime||0)/60) + 'm',
+  };
+  hist.unshift(entry);
+  if(hist.length > 20) hist = hist.slice(0, 20);
+  try { localStorage.setItem('slimeWarsHistory', JSON.stringify(hist)); } catch(e){}
+}
+
+function openMatchHistory(){
+  showScreen('sHistory');
+  renderMatchHistory();
+}
+
+function renderMatchHistory(){
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem('slimeWarsHistory')) || []; } catch(e){}
+  const el = document.getElementById('histContent');
+  if(!el) return;
+  if(hist.length === 0){
+    el.innerHTML = '<div class="hist-empty">NO MATCHES PLAYED YET<br><br>Play a game to see your history here!</div>';
+    return;
+  }
+  // Summary stats
+  const wins = hist.filter(h=>h.result==='WIN').length;
+  const totalKills = hist.reduce((s,h)=>s+h.kills,0);
+  const totalDeaths = hist.reduce((s,h)=>s+h.deaths,0);
+  el.innerHTML = `
+    <div style="display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap;">
+      <div style="background:rgba(5,15,35,.9);border:1px solid var(--border);padding:14px 22px;border-radius:4px;text-align:center;">
+        <div style="font-family:'Orbitron';font-size:22px;color:#39ff14;">${wins}/${hist.length}</div>
+        <div style="font-size:9px;color:#3a6a8a;letter-spacing:2px;margin-top:2px;">WIN RATE</div>
+      </div>
+      <div style="background:rgba(5,15,35,.9);border:1px solid var(--border);padding:14px 22px;border-radius:4px;text-align:center;">
+        <div style="font-family:'Orbitron';font-size:22px;color:var(--orange);">${totalKills}</div>
+        <div style="font-size:9px;color:#3a6a8a;letter-spacing:2px;margin-top:2px;">TOTAL KILLS</div>
+      </div>
+      <div style="background:rgba(5,15,35,.9);border:1px solid var(--border);padding:14px 22px;border-radius:4px;text-align:center;">
+        <div style="font-family:'Orbitron';font-size:22px;color:#7ad;">${totalDeaths>0?(totalKills/totalDeaths).toFixed(2):'∞'}</div>
+        <div style="font-size:9px;color:#3a6a8a;letter-spacing:2px;margin-top:2px;">K/D RATIO</div>
+      </div>
+      <div style="background:rgba(5,15,35,.9);border:1px solid var(--border);padding:14px 22px;border-radius:4px;text-align:center;">
+        <div style="font-family:'Orbitron';font-size:22px;color:#fbbf24;">${_xpData.level}</div>
+        <div style="font-size:9px;color:#3a6a8a;letter-spacing:2px;margin-top:2px;">LEVEL</div>
+      </div>
+    </div>
+    <table class="hist-table">
+      <thead><tr><th>DATE</th><th>MODE</th><th>RESULT</th><th>K</th><th>D</th><th>K/D</th><th>WINNER</th><th>TIME</th></tr></thead>
+      <tbody>${hist.map(h=>`
+        <tr>
+          <td style="color:#4a7a9a;">${h.date}</td>
+          <td><span style="color:#fa4;">${h.mode}</span></td>
+          <td class="${h.result==='WIN'?'hist-win':h.result==='LOSS'?'hist-loss':'hist-draw'}">${h.result}</td>
+          <td style="color:var(--orange);">${h.kills}</td>
+          <td style="color:var(--red);">${h.deaths}</td>
+          <td style="color:#6a9aaa;">${h.deaths>0?(h.kills/h.deaths).toFixed(1):'∞'}</td>
+          <td style="color:#ccc;font-size:11px;">${(h.winner||'???').slice(0,14)}</td>
+          <td style="color:#4a7a9a;">${h.duration||'?'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:14px;text-align:right;">
+      <button class="btn sm red" onclick="clearMatchHistory()">🗑 CLEAR HISTORY</button>
+    </div>`;
+}
+
+function clearMatchHistory(){
+  if(!confirm('Clear all match history?')) return;
+  localStorage.removeItem('slimeWarsHistory');
+  renderMatchHistory();
+}
+
+// ─── KILL STREAK ANNOUNCEMENTS ────────────────────────────────────
+const STREAK_MSGS = [
+  [2,'DOUBLE KILL!',false],[3,'TRIPLE KILL!',false],[4,'QUAD KILL!!',true],
+  [5,'PENTA KILL!!!',true],[6,'UNSTOPPABLE!',true],[7,'RAMPAGE!!!',true],
+  [8,'SLIME OVERLORD!!!',true],[10,'GOD MODE!!!',true],
+];
+let _killStreakCount = 0;
+let _killStreakTimer = null;
+
+function triggerKillStreak(playerName){
+  _killStreakCount++;
+  clearTimeout(_killStreakTimer);
+  _killStreakTimer = setTimeout(()=>{ _killStreakCount = 0; }, 8000);
+  const match = STREAK_MSGS.slice().reverse().find(([n])=>_killStreakCount>=n);
+  if(!match) return;
+  const [,msg,mega] = match;
+  const container = document.getElementById('hudStreakAnnounce');
+  if(!container) return;
+  const div = document.createElement('div');
+  div.className = 'streak-announce' + (mega?' mega':'');
+  div.textContent = msg;
+  container.appendChild(div);
+  SND.kill && SND.kill();
+  if(mega){ G.shakeX=(Math.random()-.5)*18; G.shakeY=(Math.random()-.5)*18; }
+  setTimeout(()=>div.remove(), 2500);
+  // If 5+ kill streak, show player name banner
+  if(_killStreakCount >= 5){
+    const banner = document.createElement('div');
+    banner.className = 'streak-announce';
+    banner.style.fontSize = '14px';
+    banner.style.color = '#fbbf24';
+    banner.textContent = `${playerName} IS ON A RAMPAGE`;
+    container.appendChild(banner);
+    setTimeout(()=>banner.remove(), 2500);
+  }
+}
+
+// ─── DASH / DODGE ROLL ────────────────────────────────────────────
+let dashState = {
+  cooldown: 0,
+  COOLDOWN: 3.5,  // seconds
+  DURATION: 0.22, // seconds dash lasts
+  SPEED: 580,     // px/s during dash
+  active: false,
+  timer: 0,
+  vx: 0, vy: 0,
+  iframes: false,
+};
+
+function tryDash(){
+  if(!G.player || G.player.dead || dashState.cooldown > 0 || dashState.active) return;
+  // Direction: use movement keys or aim angle as fallback
+  let dx = 0, dy = 0;
+  if(keys['KeyW']) dy -= 1;
+  if(keys['KeyS']) dy += 1;
+  if(keys['KeyA']) dx -= 1;
+  if(keys['KeyD']) dx += 1;
+  if(dx===0 && dy===0){
+    dx = Math.cos(G.player.angle);
+    dy = Math.sin(G.player.angle);
+  }
+  const len = Math.hypot(dx,dy)||1;
+  dashState.active = true;
+  dashState.timer = dashState.DURATION;
+  dashState.iframes = true;
+  dashState.vx = (dx/len) * dashState.SPEED;
+  dashState.vy = (dy/len) * dashState.SPEED;
+  dashState.cooldown = dashState.COOLDOWN;
+  // Dash particles
+  for(let i=0;i<8;i++){
+    const a = Math.atan2(dy,dx) + (Math.random()-.5)*1.2;
+    trailParticles.push({
+      x:G.player.x, y:G.player.y,
+      vx:Math.cos(a)*80, vy:Math.sin(a)*80,
+      life:0.35, maxLife:0.35,
+      color:'rgba(100,200,255,',
+    });
+  }
+  SND.pickup && SND.pickup();
+  document.getElementById('hudDash')?.classList.add('vis');
+}
+
+function updateDash(dt){
+  if(!G.player) return;
+  if(dashState.active){
+    dashState.timer -= dt;
+    moveWithCollision(G.player, dashState.vx * dt, dashState.vy * dt);
+    if(dashState.timer <= 0){
+      dashState.active = false;
+      dashState.iframes = false;
+    }
+  }
+  if(dashState.cooldown > 0){
+    dashState.cooldown = Math.max(0, dashState.cooldown - dt);
+    const pct = 1 - dashState.cooldown / dashState.COOLDOWN;
+    const bar = document.getElementById('dashBarFill');
+    if(bar) bar.style.width = (pct * 100) + '%';
+    if(dashState.cooldown <= 0){
+      document.getElementById('hudDash')?.classList.remove('vis');
+      showNotif('⚡ DASH READY', 800);
+    }
+  }
+}
+
+// Patch updatePlayer to incorporate dash and block damage during iframes
+// Hook into the gameLoop update cycle — consolidated in supply crate section below
+
+// Block damage during dash iframe
+const _origDealDamage = dealDamage;
+window.dealDamage = function(attacker, victim, dmg){
+  if(victim && victim.isPlayer && dashState.iframes) return; // invincible during dash
+  _origDealDamage(attacker, victim, dmg);
+};
+
+// Space key → dash
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space' && document.getElementById('sGame').classList.contains('active') && !document.getElementById('gchatInput').classList.contains('active')){
+    e.preventDefault();
+    tryDash();
+  }
+});
+
+// ─── SUPPLY CRATES ────────────────────────────────────────────────
+// Supply crates: high-tier weapon + armor, spawn periodically on map
+let supplyCrates = [];
+const SUPPLY_CRATE_INTERVAL = 45; // seconds between spawns
+const SUPPLY_CRATE_WEAPONS = [4, 5, 6, 12, 14, 16, 19, 20]; // high-tier weapon IDs
+let _nextCrateTimer = SUPPLY_CRATE_INTERVAL;
+
+function spawnSupplyCrate(){
+  if(!mapRoads.length) return;
+  let px, py, att = 0;
+  do {
+    const rd = mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    px = rd.x + 30 + Math.random()*(Math.max(1, rd.w - 60));
+    py = rd.y + 30 + Math.random()*(Math.max(1, rd.h - 60));
+    att++;
+  } while(att < 30 && obstacles.some(o=>circleRect(px,py,40,o.x,o.y,o.w,o.h)));
+  const wid = SUPPLY_CRATE_WEAPONS[Math.floor(Math.random()*SUPPLY_CRATE_WEAPONS.length)];
+  supplyCrates.push({ x:px, y:py, weaponId:wid, age:0, maxAge:30, announced:false });
+  showNotif('📦 SUPPLY CRATE INCOMING!', 3000);
+  addGChat('SERVER', '📦 Supply crate has landed! Check the minimap.');
+  SND.uav && SND.uav();
+}
+
+function updateSupplyCrates(dt){
+  if(G.gameOver) return;
+  _nextCrateTimer -= dt;
+  if(_nextCrateTimer <= 0){
+    _nextCrateTimer = SUPPLY_CRATE_INTERVAL;
+    spawnSupplyCrate();
+  }
+  // Expire old crates
+  for(let i = supplyCrates.length-1; i >= 0; i--){
+    const c = supplyCrates[i];
+    c.age += dt;
+    if(c.age > c.maxAge) { supplyCrates.splice(i,1); continue; }
+    // Announce at 10s warning
+    if(!c.announced && c.age < 1){ c.announced = true; }
+    // Pickup check
+    if(G.player && !G.player.dead){
+      const dist = Math.hypot(G.player.x - c.x, G.player.y - c.y);
+      if(dist < G.player.r + 24){
+        const picked = playerPickup(c.weaponId);
+        if(picked){
+          G.player.armor = Math.min(G.player.maxArmor, G.player.armor + 50);
+          showNotif(`📦 CRATE: ${getWeaponDef(c.weaponId).name} + FULL ARMOR!`, 3000);
+          awardXP(30, 'CRATE');
+          SND.pickup && SND.pickup();
+          supplyCrates.splice(i,1);
+          continue;
+        }
+      }
+    }
+  }
+}
+
+function drawSupplyCrates(){
+  if(!ctx || !supplyCrates.length) return;
+  const t = G.gameTime;
+  supplyCrates.forEach(c => {
+    const bob = Math.sin(t*2.2)*3;
+    const pulse = Math.sin(t*3)*0.3 + 0.7;
+    const age_frac = c.age / c.maxAge;
+    // Fade out when near expiry
+    ctx.save();
+    if(age_frac > 0.7) ctx.globalAlpha = 1 - (age_frac-0.7)/0.3;
+    // Glow halo
+    const grd = ctx.createRadialGradient(c.x, c.y+bob, 0, c.x, c.y+bob, 38);
+    grd.addColorStop(0, `rgba(251,191,36,${pulse*0.35})`);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath(); ctx.arc(c.x, c.y+bob, 38, 0, Math.PI*2);
+    ctx.fillStyle = grd; ctx.fill();
+    // Drop shadow
+    ctx.beginPath(); ctx.ellipse(c.x, c.y+18, 18, 7, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fill();
+    // Crate body
+    const cx2 = c.x, cy2 = c.y+bob;
+    ctx.fillStyle = '#8b5e1a';
+    ctx.beginPath(); ctx.rect(cx2-16, cy2-14, 32, 28); ctx.fill();
+    // Crate stripes
+    ctx.strokeStyle = '#c8880a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(cx2-16, cy2-14, 32, 28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx2-16, cy2); ctx.lineTo(cx2+16, cy2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx2, cy2-14); ctx.lineTo(cx2, cy2+14); ctx.stroke();
+    // Weapon icon on crate
+    ctx.font='14px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(getWeaponDef(c.weaponId).icon, cx2, cy2-2);
+    // Pulsing ring
+    ctx.beginPath(); ctx.arc(c.x, c.y+bob, 22+Math.sin(t*4)*4, 0, Math.PI*2);
+    ctx.strokeStyle = `rgba(251,191,36,${pulse*0.8})`; ctx.lineWidth = 2; ctx.stroke();
+    // Label
+    ctx.fillStyle = '#fbbf24'; ctx.font = "bold 8px 'Orbitron',monospace";
+    ctx.textBaseline='bottom'; ctx.fillText('📦 CRATE', c.x, c.y+bob-18);
+    // Timer bar
+    const lifeLeft = 1 - (c.age/c.maxAge);
+    const bw = 40;
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(c.x-bw/2, c.y+bob+18, bw, 4);
+    ctx.fillStyle = lifeLeft > 0.5 ? '#fbbf24' : '#f44';
+    ctx.fillRect(c.x-bw/2, c.y+bob+18, bw*lifeLeft, 4);
+    ctx.restore();
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  });
+}
+
+// Draw crates on minimap
+function drawCratesOnMinimap(mctx, scale){
+  const t = Date.now()/1000;
+  supplyCrates.forEach(c=>{
+    mctx.beginPath();
+    mctx.arc(c.x*scale, c.y*scale, 4, 0, Math.PI*2);
+    mctx.fillStyle = `rgba(251,191,36,${0.6+Math.sin(t*4)*0.3})`;
+    mctx.fill();
+    mctx.strokeStyle='#fbbf24'; mctx.lineWidth=1; mctx.stroke();
+  });
+}
+
+// Patch render to draw supply crates
+const _origRender = render;
+window.render = function(){
+  _origRender();
+};
+// We need to hook into the draw cycle differently — patch drawPickups call area
+// Actually we'll hook into the game loop update side:
+const _origGameLoopUpdate = null; // inline — handle via the gameLoop patching below
+
+// ─── HOST CONTROLS ────────────────────────────────────────────────
+function toggleHostControls(){
+  const panel = document.getElementById('hostControls');
+  if(!panel) return;
+  panel.classList.toggle('vis');
+  if(panel.classList.contains('vis')) rebuildKickList();
+}
+
+function rebuildKickList(){
+  const list = document.getElementById('hostKickList');
+  if(!list) return;
+  // Build from real lobby players (online) or simulated (offline)
+  const src = currentRoomId ? (_lastLobbyPlayers||[]) : lobbyPlayers;
+  list.innerHTML = src
+    .filter(p => (p.socketId||p.name) !== (mySocketId||playerName))
+    .map(p => `<button class="hc-kick" onclick="hostKickPlayer('${p.socketId||''}','${(p.name||'').replace(/'/g,'')}')">${(p.name||'???').slice(0,14)} ✕</button>`)
+    .join('');
+  if(!list.innerHTML) list.innerHTML = '<span style="font-size:10px;color:#4a7a9a;">No other players</span>';
+}
+
+function hostKickPlayer(socketId, name){
+  if(currentRoomId && socketId){
+    wsSend({ type:'kick_player', targetId: socketId });
+    addLobbyMsg('YOU', `Kicked ${name}`);
+  } else {
+    // Offline: remove from lobby
+    lobbyPlayers = lobbyPlayers.filter(p=>p.name!==name);
+    addLobbyMsg('SERVER', `${name} was kicked.`);
+    renderLobbyPlayers();
+  }
+  rebuildKickList();
+}
+
+function hostVoteMap(map){
+  if(currentRoomId){
+    wsSend({ type:'host_map_vote', map });
+    addLobbyMsg('YOU', `Requesting map: ${map.toUpperCase()}`);
+  } else {
+    currentPendingMap = map;
+    showNotif(`🗺 MAP SET: ${map.toUpperCase()}`, 2000);
+    addLobbyMsg('SERVER', `Map set to: ${map.toUpperCase()}`);
+  }
+}
+
+// Show host button only to host; update when lobby changes
+const _origRenderRealLobbyPlayers = renderRealLobbyPlayers;
+window.renderRealLobbyPlayers = function(players){
+  _origRenderRealLobbyPlayers(players);
+  const hcBtn = document.getElementById('hostControlsBtn');
+  if(hcBtn) hcBtn.style.display = (currentRoomId && players.find(p=>p.socketId===mySocketId)?.ready !== undefined) ? '' : 'none';
+  // Show if we're the host (forceStartBtn is already shown/hidden by server for host)
+  const fsBtn = document.getElementById('forceStartBtn');
+  if(fsBtn && fsBtn.style.display !== 'none' && hcBtn) hcBtn.style.display = '';
+};
+
+// Patch initLobby to show host controls for offline mode (always host)
+const _origInitLobby = initLobby;
+window.initLobby = function(srv){
+  _origInitLobby(srv);
+  const hcBtn = document.getElementById('hostControlsBtn');
+  if(hcBtn && !currentRoomId) hcBtn.style.display = '';
+};
+
+// ─── IMPROVED IN-GAME CHAT ────────────────────────────────────────
+// Override addGChat to use improved styling and auto-scroll
+window.addGChat = function(name, msg){
+  const mc = document.getElementById('gchatMsgs');
+  if(!mc) return;
+  const div = document.createElement('div');
+  div.className = 'gcm' + (name===playerName?' gcm-self':'') + (name==='SERVER'?' gcm-server':'');
+  div.innerHTML = `<span class="gcn">${name}:</span>${escapeHtml(msg)}`;
+  mc.appendChild(div);
+  if(mc.children.length > 20) mc.children[0].remove();
+  // Auto-fade after 8 seconds
+  setTimeout(()=>{ if(div.parentNode){ div.style.transition='opacity 1s'; div.style.opacity='0'; setTimeout(()=>div.remove(), 1000); }}, 8000);
+  mc.scrollTop = mc.scrollHeight;
+};
+
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── SUPPLY CRATE INTEGRATION INTO RENDER ─────────────────────────
+// Patch the main render function to draw crates + update them
+const __origRender = render;
+render = function(){
+  __origRender();
+  // Draw supply crates after main render (they're world-space so we re-enter transform)
+  if(ctx && G && !G.gameOver && document.getElementById('sGame').classList.contains('active')){
+    const offX = Math.round(canvas.width/2 - G.cam.x + (G.shakeX||0));
+    const offY = Math.round(canvas.height/2 - G.cam.y + (G.shakeY||0));
+    ctx.save();
+    ctx.translate(offX, offY);
+    drawSupplyCrates();
+    ctx.restore();
+  }
+};
+
+// Patch updatePlayer (which runs every frame) to also tick supply crates + dash
+const __origUpdatePlayer2 = window.updatePlayer || updatePlayer;
+window.updatePlayer = function(dt){
+  __origUpdatePlayer2(dt);
+  updateDash(dt);
+  updateSupplyCrates(dt);
+  updateXPHUD();
+};
+
+// Also hook drawMinimap to show crates
+const _origDrawMinimap = drawMinimap;
+window.drawMinimap = function(){
+  _origDrawMinimap();
+  const mmc = document.getElementById('mmCanvas');
+  if(!mmc) return;
+  const mctx2 = mmc.getContext('2d');
+  const scale = mmc.width / MAP_SIZE;
+  drawCratesOnMinimap(mctx2, scale);
+};
+
+// ─── RESET STREAK COUNT ON DEATH ──────────────────────────────────
+// When the player dies, reset their kill streak counter
+const _origDeathReset_update = updatePlayer;
+// We detect death by watching G.player.dead transitions
+let _wasAlive = true;
+const _deathWatcher = setInterval(()=>{
+  if(!G || !G.player) return;
+  if(!_wasAlive && !G.player.dead) { _wasAlive=true; } // respawned
+  if(_wasAlive && G.player.dead) { _wasAlive=false; _killStreakCount=0; } // just died
+}, 200);
+
+// ─── INIT NEW FEATURES ────────────────────────────────────────────
+updateXPHUD();
+
+// Reset crate timer on new game
+const _origSGFL = window.startGameFromLobby;
+window.startGameFromLobby = function(){
+  _origSGFL();
+  supplyCrates = [];
+  _nextCrateTimer = SUPPLY_CRATE_INTERVAL;
+  dashState.cooldown = 0;
+  dashState.active = false;
+  _killStreakCount = 0;
+  _wasAlive = true;
+  updateXPHUD();
+  document.getElementById('hudDash')?.classList.remove('vis');
+};
+
+// ─── END NEW FEATURES ─────────────────────────────────────────────
+
 document.addEventListener('click', function startMusicOnce(){
   MUS.startMenu();
   document.removeEventListener('click', startMusicOnce);
