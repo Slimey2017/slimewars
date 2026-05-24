@@ -543,6 +543,21 @@ function handleMessage(ws, msg) {
       player.pingTs = Date.now();
       send(ws, { type: 'pong', ts: msg.ts });
       break;
+
+    // ── Host map vote ─────────────────────────────────────────────
+    case 'host_map_vote': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'lobby') break;
+      if (room.hostId !== player.socketId) {
+        send(ws, { type: 'error', msg: 'Only the host can change the map.' });
+        break;
+      }
+      const validMap = ['city','forest'].includes(msg.map) ? msg.map : 'city';
+      room.map = validMap;
+      broadcast(room, { type: 'lobby_chat', name: 'SERVER', text: `Host changed map to: ${validMap.toUpperCase()}` });
+      broadcast(room, { type: 'map_changed', map: validMap });
+      break;
+    }
  
     // ── Rematch vote ──────────────────────────────────────────────
     case 'rematch_vote': {
