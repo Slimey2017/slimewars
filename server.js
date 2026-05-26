@@ -36,7 +36,7 @@ const players = new Map();   // ws      → Player
 // ─── Room factory ──────────────────────────────────────────────────
 function createRoom(name, mode, map) {
   const id = uuidv4().slice(0, 8).toUpperCase();
-  const validMode = ['ffa','tdm','gungame'].includes(mode) ? mode : 'ffa';
+  const validMode = ['ffa','tdm','gungame','koth','infection'].includes(mode) ? mode : 'ffa';
   const validMap  = ['city','forest'].includes(map) ? map : 'city';
   const room = {
     id,
@@ -46,7 +46,7 @@ function createRoom(name, mode, map) {
     state     : 'lobby',        // lobby | ingame | gameover
     players   : new Map(),      // socketId → roomPlayer
     scores    : {},
-    scoreLimit: validMode === 'tdm' ? 50 : validMode === 'gungame' ? 22 : 30,
+    scoreLimit: validMode === 'tdm' ? 50 : validMode === 'gungame' ? 22 : validMode === 'koth' ? 100 : 30,
     startTimer: null,
     createdAt : Date.now(),
     rematchVotes: new Set(),    // socketIds that voted yes
@@ -134,6 +134,8 @@ function ensurePublicRooms() {
     createRoom('SLIMEVILLE', 'ffa');
     createRoom('GOO CANYON',  'tdm');
     createRoom('GUN GAME ARENA', 'gungame');
+    createRoom('KING OF THE HILL', 'koth');
+    createRoom('INFECTION', 'infection');
   }
 }
 ensurePublicRooms();
@@ -682,6 +684,68 @@ function handleMessage(ws, msg) {
       break;
     }
  
+    // ── Vote kick ─────────────────────────────────────────────
+    case 'vote_kick_start': {
+      const room = getPlayerRoom(player);
+      if (!room) break;
+      const targetName = String(msg.targetName || '').toLowerCase().slice(0, 24);
+      // Initialize or update vote kick state
+      if (!room.voteKick || room.voteKick.targetName !== targetName) {
+        room.voteKick = { targetName, votes: new Set(), startTime: Date.now() };
+      }
+      room.voteKick.votes.add(player.socketId);
+      const votes = room.voteKick.votes.size;
+      const total = room.players.size;
+      broadcast(room, { type: 'vote_kick_update', targetName, votes, total });
+      if (votes >= Math.ceil(total / 2)) {
+        // Kick the player
+        let kicked = false;
+        room.players.forEach((rp, sid) => {
+          if (rp.name.toLowerCase() === targetName && sid !== player.socketId) {
+            const targetWs = wsBySocketId(sid);
+            if (targetWs) { send(targetWs, { type: 'kick' }); leaveRoom(targetWs); kicked = true; }
+          }
+        });
+        if (kicked) broadcast(room, { type: 'lobby_chat', name: 'SERVER', text: `${targetName} was vote-kicked.` });
+        room.voteKick = null;
+      }
+      break;
+    }
+
+    case 'vote_kick_result':
+      // Client-side resolution acknowledgement — server already handled the logic above
+      break;
+
+    // ── Piercing rounds sync ──────────────────────────────────────
+    case 'piercing_pickup': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, { type: 'piercing_pickup', socketId: player.socketId }, ws);
+      break;
+    }
+
+    // ── Sticky bomb ───────────────────────────────────────────────
+    case 'sticky_bomb': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame') break;
+      broadcast(room, {
+        type: 'sticky_bomb',
+        socketId: player.socketId,
+        x: msg.x, y: msg.y, vx: msg.vx, vy: msg.vy,
+      }, ws);
+      break;
+    }
+
+    // ── KOTH control point update ─────────────────────────────────
+    case 'koth_points': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame' || room.mode !== 'koth') break;
+      if (!room.kothPoints) room.kothPoints = {};
+      room.kothPoints[player.socketId] = msg.points;
+      broadcast(room, { type: 'koth_update', points: room.kothPoints }, ws);
+      break;
+    }
+
     default:
       break;
   }
