@@ -564,6 +564,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
       <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
       <button class="menu-btn" onclick="openMatchHistory()">📊 MATCH HISTORY</button>
+      <button class="menu-btn" onclick="showDailyChallenges()">📅 DAILY CHALLENGES</button>
       <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
       <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
     </div>
@@ -700,6 +701,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
             <button class="crm-pill on" data-val="ffa"    onclick="crmPick('mode',this)">⚔️ FFA</button>
             <button class="crm-pill"   data-val="tdm"     onclick="crmPick('mode',this)">🛡️ TDM</button>
             <button class="crm-pill"   data-val="gungame" onclick="crmPick('mode',this)">🔫 GUN GAME</button>
+            <button class="crm-pill"   data-val="koth"    onclick="crmPick('mode',this)">👑 KOTH</button>
+            <button class="crm-pill"   data-val="infection" onclick="crmPick('mode',this)">🦠 INFECTION</button>
           </div>
         </div>
         <div>
@@ -707,6 +710,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
           <div class="crm-group" id="crmMapGroup">
             <button class="crm-pill on" data-val="city"   onclick="crmPick('map',this)">🏙️ CITY</button>
             <button class="crm-pill"    data-val="forest" onclick="crmPick('map',this)">🌲 FOREST</button>
+            <button class="crm-pill"    data-val="volcano" onclick="crmPick('map',this)">🌋 VOLCANO</button>
           </div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -780,6 +784,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <button class="btn sm" id="forceStartBtn" onclick="forceStart()" style="display:none;border-color:#f97316;color:#f97316;">▶ FORCE START</button>
     <button class="btn sm" id="switchTeamBtn" onclick="switchTeam()" style="display:none;border-color:#3af;color:#3af;">⇄ SWITCH TEAM</button>
     <button class="btn sm" id="hostControlsBtn" onclick="toggleHostControls()" style="display:none;border-color:var(--orange);color:var(--orange);">⚙ HOST</button>
+    <button class="btn sm" id="fillBotsBtn" onclick="toggleFillBots()" style="border-color:#3a6aaa;color:#3a6aaa;">☐ FILL WITH BOTS</button>
     <button class="btn" id="readyBtn" onclick="toggleReady()">READY UP</button>
   </div>
   <!-- Host controls panel -->
@@ -814,7 +819,12 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="set-row"><div><div class="set-lbl">DAMAGE NUMBERS</div></div><div class="toggle on" id="tgDmg" onclick="this.classList.toggle('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">AUTO-RELOAD</div></div><div class="toggle on" id="tgAR" onclick="this.classList.toggle('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">FOOTSTEP SOUNDS</div></div><div class="toggle on" id="tgFootstep" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">POSITIONAL AUDIO</div><div class="set-sub">Gunshots pan left/right based on enemy position</div></div><div class="toggle on" id="tgPositional" onclick="this.classList.toggle('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">SHOW FPS</div></div><div class="toggle" id="tgFPS" onclick="this.classList.toggle('on');saveSettings()"></div></div>
+    <div class="set-row"><div><div class="set-lbl">KILL SPLASH COLOR</div><div class="set-sub">Override default kill splat color</div></div>
+      <div id="killColorRow" style="display:flex;gap:6px;"></div>
+    </div>
+    <div class="set-row"><div><div class="set-lbl">BOT DIFFICULTY</div><div class="set-sub">1=Easy, 5=Nightmare (affects aim & aggression)</div></div><input type="range" min="1" max="5" value="2" id="stBotDiff" oninput="updateBotDifficulty(this.value)"></div>
     <div class="set-row"><div><div class="set-lbl">SHOW PING IN HUD</div></div><div class="toggle on" id="tgPing" onclick="this.classList.toggle('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">ENABLE NUKE (8-kill streak)</div><div class="set-sub">Players can call a nuclear strike after 8 kills</div></div><div class="toggle on" id="tgNuke" onclick="this.classList.toggle('on');nukeEnabled=this.classList.contains('on');saveSettings()"></div></div>
     <div class="set-row"><div><div class="set-lbl">COLORBLIND MODE</div><div class="set-sub">Replaces red/blue teams with yellow/purple</div></div><div class="toggle" id="tgColorblind" onclick="this.classList.toggle('on');applyColorblindMode(this.classList.contains('on'));saveSettings()"></div></div>
@@ -1764,6 +1774,7 @@ let keys={},mouse={wx:0,wy:0,sx:0,sy:0,down:false,right:false};
 let animFrame=null;
 let canvas,ctx,mmCtx,adsCtx;
 let currentPendingMap='city'; // set by server game_start / joined_room
+let lavaZones = [];
 let speedPads=[];
 let _crmMode='ffa', _crmMap='city'; // create-room modal state
 let playerTaunt=null; // {emoji,t} local player taunt display
@@ -1786,9 +1797,148 @@ let treeHideState={
 let treeHideKeyDown=false; // debounce H key
 
 // ─── MAP GENERATION ────────────────────────────────────────────
+// Volcano map extras
+let volcanoBridges=[]; // {x1,y1,x2,y2,w} narrow walkable bridges over lava
+let volcanoRocks=[];   // {x,y,r} impassable ash-rock boulders
+
+function generateVolcanoMap(){
+  currentMapType='volcano';
+  obstacles=[];weaponSpawns=[];mapBuildings=[];mapRoads=[];doors=[];sentries=[];trailParticles=[];
+  forestTrees=[];lavaZones=[];volcanoBridges=[];volcanoRocks=[];
+  speedPads=[];
+
+  const CX=MAP_SIZE/2, CY=MAP_SIZE/2;
+
+  // ── 1. CENTRAL CALDERA (giant lava pool at centre) ─────────────
+  const CALDERA_R=180;
+  // Solid filled caldera — one big zone plus a few overlapping to fill it
+  lavaZones.push({x:CX,y:CY,r:CALDERA_R,dmg:15,_caldera:true});
+  for(let a=0;a<Math.PI*2;a+=Math.PI/3){
+    lavaZones.push({x:CX+Math.cos(a)*CALDERA_R*.4,y:CY+Math.sin(a)*CALDERA_R*.4,r:CALDERA_R*.6,dmg:15,_caldera:true});
+  }
+
+  // ── 2. LAVA RIVERS: 4 channels from caldera outward ─────────────
+  // Each river is a series of overlapping circles along a line — NOT to the map edge
+  const RIVER_ANGLES=[Math.PI*.25,Math.PI*.75,Math.PI*1.25,Math.PI*1.75];
+  const RIVER_W=70; // radius of each lava blob
+  const RIVER_LEN=MAP_SIZE*.28; // stop well before edges
+  RIVER_ANGLES.forEach(ang=>{
+    const steps=10;
+    for(let s=1;s<=steps;s++){
+      const t=s/steps;
+      const rx=CX+Math.cos(ang)*(CALDERA_R*0.8+RIVER_LEN*t);
+      const ry=CY+Math.sin(ang)*(CALDERA_R*0.8+RIVER_LEN*t);
+      lavaZones.push({x:rx,y:ry,r:RIVER_W,dmg:8,_river:true});
+    }
+  });
+
+  // ── 3. WALKABLE ASH PLATFORMS ──────────────────────────────────
+  // 4 main platforms at cardinal directions (N/S/E/W), 4 smaller corner ones
+  const PLATFORMS=[];
+  const MAIN_DIST=CALDERA_R+230, MAIN_SIZE=300;
+  [0,Math.PI*.5,Math.PI,Math.PI*1.5].forEach(ang=>{
+    const px=CX+Math.cos(ang)*MAIN_DIST, py=CY+Math.sin(ang)*MAIN_DIST;
+    PLATFORMS.push({x:px-MAIN_SIZE/2,y:py-MAIN_SIZE/2,w:MAIN_SIZE,h:MAIN_SIZE,cx:px,cy:py});
+    mapBuildings.push({x:px-MAIN_SIZE/2,y:py-MAIN_SIZE/2,w:MAIN_SIZE,h:MAIN_SIZE,tone:'#1e0e06',_platform:true});
+    const WL=16,bx=px-MAIN_SIZE/2,by=py-MAIN_SIZE/2;
+    obstacles.push(
+      {x:bx,y:by,w:MAIN_SIZE,h:WL},
+      {x:bx,y:by+MAIN_SIZE-WL,w:MAIN_SIZE,h:WL},
+      {x:bx,y:by+WL,w:WL,h:MAIN_SIZE-WL*2},
+      {x:bx+MAIN_SIZE-WL,y:by+WL,w:WL,h:MAIN_SIZE-WL*2}
+    );
+  });
+  const CORNER_DIST=CALDERA_R+480, CORNER_SIZE=180;
+  [Math.PI*.25,Math.PI*.75,Math.PI*1.25,Math.PI*1.75].forEach(ang=>{
+    const px=CX+Math.cos(ang)*CORNER_DIST, py=CY+Math.sin(ang)*CORNER_DIST;
+    if(px<80||px>MAP_SIZE-80||py<80||py>MAP_SIZE-80)return;
+    PLATFORMS.push({x:px-CORNER_SIZE/2,y:py-CORNER_SIZE/2,w:CORNER_SIZE,h:CORNER_SIZE,cx:px,cy:py,_small:true});
+    mapBuildings.push({x:px-CORNER_SIZE/2,y:py-CORNER_SIZE/2,w:CORNER_SIZE,h:CORNER_SIZE,tone:'#1a0d04',_platform:true});
+  });
+
+  // ── 4. BRIDGES connecting platforms over lava rivers ───────────
+  const BRIDGE_W=55;
+  // Caldera to each platform
+  PLATFORMS.filter(p=>!p._small).forEach(p=>{
+    const ang=Math.atan2(p.cy-CY,p.cx-CX);
+    const startR=CALDERA_R+30;
+    const x1=CX+Math.cos(ang)*startR, y1=CY+Math.sin(ang)*startR;
+    const x2=p.cx-Math.cos(ang)*((p.w||160)/2-20);
+    const y2=p.cy-Math.sin(ang)*((p.h||160)/2-20);
+    volcanoBridges.push({x1,y1,x2,y2,w:BRIDGE_W});
+    // bridge walkable path as road segment
+    mapRoads.push({x:Math.min(x1,x2)-BRIDGE_W/2,y:Math.min(y1,y2)-BRIDGE_W/2,
+      w:Math.abs(x2-x1)+BRIDGE_W,h:Math.abs(y2-y1)+BRIDGE_W,dir:'bridge',_bridge:true,x1,y1,x2,y2,bw:BRIDGE_W});
+  });
+  // Platform-to-platform bridges
+  const pArr=PLATFORMS.filter(p=>!p._small);
+  for(let i=0;i<pArr.length;i++){
+    const a=pArr[i], b=pArr[(i+1)%pArr.length];
+    volcanoBridges.push({x1:a.cx,y1:a.cy,x2:b.cx,y2:b.cy,w:BRIDGE_W});
+    mapRoads.push({x:Math.min(a.cx,b.cx)-BRIDGE_W/2,y:Math.min(a.cy,b.cy)-BRIDGE_W/2,
+      w:Math.abs(b.cx-a.cx)+BRIDGE_W,h:Math.abs(b.cy-a.cy)+BRIDGE_W,dir:'bridge',_bridge:true,
+      x1:a.cx,y1:a.cy,x2:b.cx,y2:b.cy,bw:BRIDGE_W});
+  }
+
+  // ── 5. ASH ROCK BOULDERS as scatter cover ──────────────────────
+  const safeFromLava=(px,py,margin=40)=>!lavaZones.some(lz=>Math.hypot(px-lz.x,py-lz.y)<lz.r+margin);
+  PLATFORMS.forEach(p=>{
+    const count=p._small?2:5;
+    for(let i=0;i<count;i++){
+      let rx,ry,att=0;
+      do{rx=p.x+20+Math.random()*(p.w-40);ry=p.y+20+Math.random()*(p.h-40);att++;}
+      while(att<20&&!safeFromLava(rx,ry,10));
+      if(att<20){
+        const rr=22+Math.random()*20;
+        volcanoRocks.push({x:rx,y:ry,r:rr});
+        obstacles.push({x:rx-rr,y:ry-rr,w:rr*2,h:rr*2,_rock:true,cx:rx,cy:ry,cr:rr});
+      }
+    }
+  });
+
+  // ── 6. WEAPON SPAWNS (only on safe ground) ─────────────────────
+  const safeSpots=[];
+  PLATFORMS.forEach(p=>{
+    for(let t=0;t<30;t++){
+      const sx=p.x+30+Math.random()*(p.w-60),sy=p.y+30+Math.random()*(p.h-60);
+      if(safeFromLava(sx,sy,30)&&!obstacles.some(o=>circleRect(sx,sy,30,o.x,o.y,o.w,o.h)))
+        safeSpots.push({x:sx,y:sy});
+    }
+  });
+  // Also bridge spots
+  volcanoBridges.forEach(br=>{
+    for(let t=0;t<4;t++){
+      const f=0.3+Math.random()*0.4;
+      const sx=br.x1+(br.x2-br.x1)*f, sy=br.y1+(br.y2-br.y1)*f;
+      if(safeFromLava(sx,sy,20)) safeSpots.push({x:sx,y:sy});
+    }
+  });
+  if(!safeSpots.length) safeSpots.push({x:CX+300,y:CY});
+  for(let i=1;i<WEAPONS_BASE.length&&safeSpots.length;i++){
+    const sp=safeSpots.splice(Math.floor(Math.random()*safeSpots.length),1)[0];
+    weaponSpawns.push({x:sp.x,y:sp.y,weaponId:i,timer:0});
+  }
+  // Armor + medkit drops
+  for(let i=0;i<8;i++){
+    const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
+    if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-1,timer:0});
+  }
+  for(let i=0;i<8;i++){
+    const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
+    if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-2,timer:0});
+  }
+
+  // ── 7. SPAWN POINTS on platforms ───────────────────────────────
+  G.spawnPoints=[];
+  safeSpots.forEach(s=>G.spawnPoints.push(s));
+  PLATFORMS.forEach(p=>G.spawnPoints.push({x:p.cx,y:p.cy}));
+  if(!G.spawnPoints.length) G.spawnPoints.push({x:CX+400,y:CY});
+}
+
 function generateMap(){
   currentMapType='city';
   obstacles=[];weaponSpawns=[];mapBuildings=[];mapRoads=[];doors=[];sentries=[];trailParticles=[];
+  forestTrees=[];lavaZones=[];volcanoBridges=[];volcanoRocks=[];speedPads=[];
   const roadXs=[],roadYs=[];
   for(let x=GRID_OFFSET;x<MAP_SIZE-GRID_OFFSET;x+=CELL) roadXs.push(x);
   for(let y=GRID_OFFSET;y<MAP_SIZE-GRID_OFFSET;y+=CELL) roadYs.push(y);
@@ -1842,6 +1992,7 @@ function generateMap(){
   for(let i=0;i<8;i++){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
     weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-1,timer:0});
+ 
   }
   // Medkits (+25 HP)
   for(let i=0;i<10;i++){
@@ -1900,7 +2051,7 @@ const FOREST_OFFSET = 100;
 function generateForestMap(){
   currentMapType='forest';
   obstacles=[];weaponSpawns=[];mapBuildings=[];mapRoads=[];doors=[];sentries=[];trailParticles=[];
-  forestTrees=[];
+  forestTrees=[];lavaZones=[];volcanoBridges=[];volcanoRocks=[];speedPads=[];
 
   // Build a grid of horizontal and vertical dirt paths
   const pathXs=[], pathYs=[];
@@ -1980,6 +2131,11 @@ function generateForestMap(){
       weaponId:-1,timer:0
     });
   }
+  // Forest piercing rounds
+  for(let i=0;i<3;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+20+Math.random()*(Math.max(1,rd.w-40)),y:rd.y+20+Math.random()*(Math.max(1,rd.h-40)),weaponId:-4,timer:30});
+  }
   // Forest medkits (+25 HP)
   for(let i=0;i<10;i++){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
@@ -2014,6 +2170,104 @@ function generateForestMap(){
 }
 
 // ─── FOREST DRAW FUNCTIONS ─────────────────────────────────────
+function drawVolcanoBackground(){
+  const t=G.gameTime;
+  // Deep black basalt ground
+  ctx.fillStyle='#0a0400'; ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
+
+  // Ash ground texture — subtle dark patches
+  for(let i=0;i<60;i++){
+    const px=(i*1337+733)%MAP_SIZE, py=(i*977+521)%MAP_SIZE;
+    ctx.beginPath(); ctx.ellipse(px,py,40+i%30,20+i%18,(i*.4)%Math.PI,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${15+i%10},${8+i%6},${4+i%4},.6)`; ctx.fill();
+  }
+
+  // Lava glow under rivers (bg layer)
+  lavaZones.filter(lz=>lz._river||lz._caldera).forEach(lz=>{
+    const pulse=0.6+0.4*Math.sin(t*1.2+lz.x*.005+lz.y*.007);
+    const grd=ctx.createRadialGradient(lz.x,lz.y,0,lz.x,lz.y,lz.r*1.4);
+    grd.addColorStop(0,`rgba(255,90,0,${0.18*pulse})`);
+    grd.addColorStop(1,'rgba(100,0,0,0)');
+    ctx.beginPath(); ctx.arc(lz.x,lz.y,lz.r*1.4,0,Math.PI*2);
+    ctx.fillStyle=grd; ctx.fill();
+  });
+
+  // Ash platforms
+  mapBuildings.filter(b=>b._platform).forEach(b=>{
+    // Platform base — layered ash stone
+    const grad=ctx.createLinearGradient(b.x,b.y,b.x+b.w,b.y+b.h);
+    grad.addColorStop(0,'#1c100a'); grad.addColorStop(.5,'#221408'); grad.addColorStop(1,'#180e06');
+    ctx.fillStyle=grad; ctx.fillRect(b.x,b.y,b.w,b.h);
+    // Platform edge glow (from lava below)
+    const eg=ctx.createLinearGradient(b.x,b.y+b.h-16,b.x,b.y+b.h+12);
+    eg.addColorStop(0,'rgba(255,60,0,.22)'); eg.addColorStop(1,'rgba(255,30,0,0)');
+    ctx.fillStyle=eg; ctx.fillRect(b.x,b.y+b.h-8,b.w,20);
+    // Crack texture
+    ctx.strokeStyle='rgba(255,60,0,.06)'; ctx.lineWidth=1;
+    for(let i=0;i<4;i++){
+      const cx=b.x+b.w*(.15+i*.2), cy=b.y+b.h*.3+i*12;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+(Math.random()-.5)*40,cy+30+(i*8)); ctx.stroke();
+    }
+    // Raised rim highlight
+    ctx.strokeStyle='rgba(255,80,0,.15)'; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,b.w,b.h);
+  });
+
+  // Bridges over lava
+  volcanoBridges.forEach(br=>{
+    const ang=Math.atan2(br.y2-br.y1,br.x2-br.x1);
+    const perp=ang+Math.PI/2;
+    const len=Math.hypot(br.x2-br.x1,br.y2-br.y1);
+    const hw=br.w/2;
+    ctx.save(); ctx.translate(br.x1,br.y1); ctx.rotate(ang);
+    // Bridge surface — dark stone planks
+    const bg=ctx.createLinearGradient(0,-hw,0,hw);
+    bg.addColorStop(0,'#1a0f08'); bg.addColorStop(.5,'#251508'); bg.addColorStop(1,'#1a0f08');
+    ctx.fillStyle=bg; ctx.fillRect(0,-hw,len,br.w);
+    // Plank lines
+    ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.lineWidth=3;
+    for(let p=12;p<len;p+=18){ ctx.beginPath();ctx.moveTo(p,-hw);ctx.lineTo(p,hw);ctx.stroke(); }
+    // Side rails
+    ctx.strokeStyle='rgba(80,40,10,.9)'; ctx.lineWidth=4;
+    ctx.beginPath();ctx.moveTo(0,-hw);ctx.lineTo(len,-hw);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,hw);ctx.lineTo(len,hw);ctx.stroke();
+    // Lava glow seeping through cracks
+    const glow=0.12+0.08*Math.sin(t*2+br.x1*.01);
+    ctx.fillStyle=`rgba(255,80,0,${glow})`;
+    for(let p=6;p<len;p+=18){ ctx.fillRect(p,-hw+3,10,br.w-6); }
+    ctx.restore();
+  });
+
+  // Outer boundary glow
+  ctx.strokeStyle='rgba(255,50,0,.12)'; ctx.lineWidth=8; ctx.strokeRect(0,0,MAP_SIZE,MAP_SIZE);
+}
+
+function drawVolcanoObstacles(){
+  // Ash-rock boulders
+  volcanoRocks.forEach(rock=>{
+    const t=G.gameTime;
+    // Shadow
+    ctx.beginPath(); ctx.ellipse(rock.x+6,rock.y+8,rock.r*.8,rock.r*.5,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fill();
+    // Main boulder — layered ash stone
+    const rg=ctx.createRadialGradient(rock.x-rock.r*.3,rock.y-rock.r*.3,rock.r*.05,rock.x,rock.y,rock.r);
+    rg.addColorStop(0,'#3a2010'); rg.addColorStop(.5,'#221408'); rg.addColorStop(1,'#100802');
+    ctx.beginPath(); ctx.arc(rock.x,rock.y,rock.r,0,Math.PI*2);
+    ctx.fillStyle=rg; ctx.fill();
+    // Lava crack glow
+    const glow=0.4+0.3*Math.sin(t*1.8+rock.x*.02);
+    ctx.strokeStyle=`rgba(255,60,0,${glow})`; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(rock.x,rock.y,rock.r,0,Math.PI*2); ctx.stroke();
+    // Highlight chip
+    ctx.beginPath(); ctx.arc(rock.x-rock.r*.3,rock.y-rock.r*.3,rock.r*.2,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,.04)'; ctx.fill();
+  });
+  // Platform walls (same colour as platform)
+  obstacles.filter(o=>!o._rock).forEach(o=>{
+    ctx.fillStyle='#1c1008'; ctx.fillRect(o.x,o.y,o.w,o.h);
+    ctx.strokeStyle='rgba(255,50,0,.2)'; ctx.lineWidth=1; ctx.strokeRect(o.x,o.y,o.w,o.h);
+  });
+}
+
 function drawForestBackground(){
   // Base ground — dark forest floor
   ctx.fillStyle='#1a2a18'; ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
@@ -2197,9 +2451,13 @@ window.addEventListener('resize',()=>{ if(canvas){canvas.width=window.innerWidth
 // ─── DRAW SLIME ────────────────────────────────────────────────
 function drawSlime(c,ex,ey,r,skin,angle,flicker,team,hat,face,weyeSway=0){
   const s=(BODY_COLORS[skin]||BODY_COLORS[0]);
-  if(gameMode==='tdm'&&team!==undefined){
+  if((gameMode==='tdm'||gameMode==='infection')&&team!==undefined){
     c.beginPath();c.arc(ex,ey,r+4,0,Math.PI*2);
-    c.fillStyle=team===0?'rgba(80,150,255,.3)':'rgba(255,80,80,.3)';c.fill();
+    if(gameMode==='infection')
+      c.fillStyle=team===1?'rgba(0,200,0,.35)':'rgba(100,200,100,.15)';
+    else
+      c.fillStyle=team===0?'rgba(80,150,255,.3)':'rgba(255,80,80,.3)';
+    c.fill();
   }
   // Body squish based on movement direction
   c.save(); c.translate(ex,ey);
@@ -2449,7 +2707,8 @@ function spawnBullet(owner,weapon,angle){
 }
 
 function getMeleeTargets(owner){
-  if(gameMode==='tdm') return (owner.isPlayer?G.npcs:[G.player,...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
+  const useTeams=gameMode==='tdm'||gameMode==='infection';
+  if(useTeams) return (owner.isPlayer?G.npcs:[G.player,...G.npcs.filter(n=>n!==owner)]).filter(e=>e&&!e.dead&&e.team!==owner.team);
   return owner.isPlayer?G.npcs.filter(n=>!n.dead):[G.player,...G.npcs.filter(n=>n!==owner&&!n.dead)];
 }
 
@@ -2560,6 +2819,7 @@ function killEntity(killer,victim){
 
 function checkWin(){
   if(G.gameOver)return;
+  if(gameMode==='infection'||gameMode==='koth')return; // these manage their own win conditions
   const lim=G.scoreLimit;
   if(gameMode==='ffa'){
     for(const [n,sc] of Object.entries(G.scores)){ if(sc.k>=lim){endGame(n);return;} }
@@ -2655,6 +2915,8 @@ function moveWithCollision(entity,dx,dy){
 
 function updateNPC(npc,dt){
   if(npc.dead){
+    // In infection mode, respawn is managed by updateInfection — survivors stay dead
+    if(isInfection()) return;
     npc.respawnTimer-=dt;
     if(npc.respawnTimer<=0){
       const sp=getSpawnPoint([G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)]);
@@ -3059,9 +3321,10 @@ function updateBullets(dt){
       }
       if(hit)break;
       // NPC targets
+      const useTeams=gameMode==='tdm'||gameMode==='infection';
       const tgts=b.owner.isPlayer
-        ?G.npcs.filter(n=>gameMode!=='tdm'||n.team!==b.owner.team)
-        :G.npcs.filter(n=>n!==b.owner&&(gameMode!=='tdm'||n.team!==b.owner.team));
+        ?G.npcs.filter(n=>!useTeams||n.team!==b.owner.team)
+        :G.npcs.filter(n=>n!==b.owner&&(!useTeams||n.team!==b.owner.team));
       for(let ti=0;ti<tgts.length&&!hit;ti++){
         const t=tgts[ti]; if(!t||t.dead)continue;
         if(Math.hypot(t.x-b.x,t.y-b.y)<t.r){
@@ -3100,7 +3363,7 @@ function updateBullets(dt){
           } else {
             ownerTeam = b.owner?.team;
           }
-          const same = gameMode==='tdm' && ownerTeam !== undefined && ownerTeam === G.player.team;
+          const same = (gameMode==='tdm'||gameMode==='infection') && ownerTeam !== undefined && ownerTeam === G.player.team;
           if(!same && Math.hypot(G.player.x-b.x,G.player.y-b.y)<G.player.r){
             if(ownerIsRemote){
               // Remote bullet: server is authoritative — it sends you_hit with exact HP/armor deductions.
@@ -3336,6 +3599,7 @@ function render(){
 
 function drawBackground(){
   if(currentMapType==='forest'){ drawForestBackground(); return; }
+  if(currentMapType==='volcano'){ drawVolcanoBackground(); return; }
   ctx.fillStyle='#1a1e22'; ctx.fillRect(0,0,MAP_SIZE,MAP_SIZE);
   mapBuildings.forEach(b=>{
     ctx.fillStyle=b.tone||'#1e3a4a'; ctx.fillRect(b.x,b.y,b.w,b.h);
@@ -3374,6 +3638,10 @@ function drawObstacles(){
       ctx.fillStyle='rgba(255,255,255,.07)'; ctx.fillRect(o.x,o.y,o.w,2); ctx.fillRect(o.x,o.y,2,o.h);
       ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(o.x,o.y+o.h-2,o.w,2); ctx.fillRect(o.x+o.w-2,o.y,2,o.h);
     });
+    return;
+  }
+  if(currentMapType==='volcano'){
+    drawVolcanoObstacles();
     return;
   }
   obstacles.forEach(o=>{
@@ -3476,7 +3744,16 @@ function drawPickups(){
     const pulse=Math.sin(t*2.5+sp.weaponId)*3;
     ctx.beginPath(); ctx.ellipse(sp.x,sp.y+14,12,4,0,0,Math.PI*2);
     ctx.fillStyle='rgba(0,0,0,.35)'; ctx.fill();
-    if(sp.weaponId===-1){
+    if(sp.weaponId===-4){
+      // Piercing Rounds
+      ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,0,50,.7)'; ctx.fill();
+      ctx.strokeStyle='#00ffff'; ctx.lineWidth=2; ctx.stroke();
+      ctx.font='13px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('🔵',sp.x,sp.y+bob);
+      ctx.fillStyle='rgba(0,200,255,.9)'; ctx.font='bold 9px sans-serif';
+      ctx.textBaseline='top'; ctx.fillText('PIERCING',sp.x,sp.y+bob+18);
+    } else if(sp.weaponId===-1){
       // Armor
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
       ctx.fillStyle='rgba(0,30,80,.6)'; ctx.fill();
@@ -3485,6 +3762,11 @@ function drawPickups(){
       ctx.fillText('🛡️',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(100,180,255,.9)'; ctx.font='bold 10px sans-serif';
       ctx.textBaseline='top'; ctx.fillText('ARMOR',sp.x,sp.y+bob+18);
+    } else if(sp.weaponId===-4){
+      // Piercing rounds
+      activatePiercing();
+      sp.timer=45;
+      showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (15s)');
     } else if(sp.weaponId===-2){
       // Medkit (+25 HP)
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
@@ -3684,8 +3966,20 @@ function updateHUD(){
   if(gameMode==='ffa'){
     const sorted=Object.entries(G.scores).sort((a,b)=>b[1].k-a[1].k);
     const top=sorted[0]?.[1].k||0;
-    document.getElementById('scoreDisp').textContent=`${p.kills} / ${top}`;
+    document.getElementById('scoreDisp').textContent=`${p.kills} — ${top}`;
     document.getElementById('scoreLbl').textContent=`YOUR KILLS / LEADER · ${G.scoreLimit} TO WIN`;
+  } else if(gameMode==='koth'){
+    const pPts=Math.floor(kothScores.p),ePts=Math.floor(kothScores.e);
+    document.getElementById('scoreDisp').innerHTML=`<span style="color:#39ff14">${pPts}</span> — <span style="color:#f44">${ePts}</span>`;
+    document.getElementById('scoreLbl').textContent=`YOU / ENEMY · ${KOTH_WIN} TO WIN`;
+  } else if(gameMode==='infection'){
+    const sCount=G.npcs.filter(n=>!n.dead&&n.team===0).length+(G.player.team===0?1:0);
+    const iCount=G.npcs.filter(n=>!n.dead&&n.team===1).length+(G.player.team===1?1:0);
+    document.getElementById('scoreDisp').innerHTML=`<span style="color:#4f4">${sCount}</span> — <span style="color:#f44">${iCount}</span>`;
+    document.getElementById('scoreLbl').textContent=`SURVIVORS / INFECTED · ⏱${Math.ceil(_infTimeLeft)}s`;
+  } else if(gameMode==='gungame'){
+    document.getElementById('scoreDisp').textContent=`${p.kills} / 22`;
+    document.getElementById('scoreLbl').textContent='GUN GAME — KILLS TO ADVANCE';
   } else {
     let b=p.kills,r=0;
     G.npcs.forEach(n=>{ if(n.team===0)b+=n.kills||0; else r+=n.kills||0; });
@@ -3785,6 +4079,16 @@ function drawMinimap(){
       mctx.beginPath(); mctx.arc(t.x*scale,t.y*scale,Math.max(1,t.canopy*scale),0,Math.PI*2);
       mctx.fillStyle='#1e3a1a'; mctx.fill();
     });
+  } else if(currentMapType==='volcano'){
+    mctx.fillStyle='#0a0400'; mctx.fillRect(0,0,MW,MH);
+    // Lava glow
+    lavaZones.forEach(lz=>{ mctx.beginPath();mctx.arc(lz.x*scale,lz.y*scale,Math.max(2,lz.r*scale),0,Math.PI*2);mctx.fillStyle='rgba(255,100,0,0.6)';mctx.fill(); });
+    // Platforms
+    mapBuildings.filter(b=>b._platform).forEach(b=>{ mctx.fillStyle='#2a1208'; mctx.fillRect(b.x*scale,b.y*scale,b.w*scale,b.h*scale); });
+    // Bridges
+    volcanoBridges.forEach(br=>{ mctx.strokeStyle='#4a2010'; mctx.lineWidth=Math.max(2,br.w*scale); mctx.beginPath();mctx.moveTo(br.x1*scale,br.y1*scale);mctx.lineTo(br.x2*scale,br.y2*scale);mctx.stroke(); });
+    // Rocks
+    volcanoRocks.forEach(r=>{ mctx.beginPath();mctx.arc(r.x*scale,r.y*scale,Math.max(1,r.r*scale),0,Math.PI*2);mctx.fillStyle='#221408';mctx.fill(); });
   } else {
     mctx.fillStyle='#1d2228'; mctx.fillRect(0,0,MW,MH);
     mapBuildings.forEach(b=>{ mctx.fillStyle='#1e3a4a'; mctx.fillRect(b.x*scale,b.y*scale,b.w*scale,b.h*scale); });
@@ -3851,13 +4155,21 @@ function gameLoop(ts){
     G.frameCount++; G.fpsTimer+=dt;
     if(G.fpsTimer>=.5){G.fps=Math.round(G.frameCount/G.fpsTimer);G.frameCount=0;G.fpsTimer=0;}
     if(!G.player.dead) updatePlayer(dt);
-    else{      G.respawnTimer=Math.max(0,(G.respawnTimer||0)-dt);
-      document.getElementById('rsTimer').textContent=Math.ceil(G.respawnTimer);
-      if(G.respawnTimer<=0){
-        const sp=getSpawnPoint(G.npcs.filter(n=>!n.dead));
-        G.player.x=sp.x;G.player.y=sp.y;G.player.hp=G.player.maxHp;G.player.armor=0;G.player.dead=false;G.player.flicker=0;
-        G.respawnTimer=5; // reset for next death
+    else{
+      // In infection: if player was a survivor killed by infected, they become infected instead of dying
+      if(isInfection()&&G.player.team===0&&_infPhase==='running'){
+        _infectPlayer();
+        G.player.dead=false; G.player.hp=80; G.player.armor=0;
         document.getElementById('hudRespawn').classList.remove('vis');
+      } else {
+        G.respawnTimer=Math.max(0,(G.respawnTimer||0)-dt);
+        document.getElementById('rsTimer').textContent=Math.ceil(G.respawnTimer);
+        if(G.respawnTimer<=0){
+          const sp=getSpawnPoint(G.npcs.filter(n=>!n.dead));
+          G.player.x=sp.x;G.player.y=sp.y;G.player.hp=G.player.maxHp;G.player.armor=0;G.player.dead=false;G.player.flicker=0;
+          G.respawnTimer=5;
+          document.getElementById('hudRespawn').classList.remove('vis');
+        }
       }
     }
     updateTreeHide(dt);
@@ -4179,7 +4491,7 @@ function setMode(m){
   gameMode=m; G.mode=m;
   document.getElementById('btnFFA').classList.toggle('on',m==='ffa');
   document.getElementById('btnTDM').classList.toggle('on',m==='tdm');
-  G.scoreLimit=m==='tdm'?50:30;
+  G.scoreLimit=({tdm:50,gungame:22,koth:100,infection:30}[m]||30);
 }
 function lockLobbyMode(m){
   setMode(m);
@@ -4216,7 +4528,7 @@ function startGameFromLobby(){
   if(lobbyInterval){clearInterval(lobbyInterval);lobbyInterval=null;}
   // playerName already set from menuUsername — don't override from a removed input
   showScreen('sGame'); setupCanvas();
-  G={mode:gameMode,scoreLimit:gameMode==='tdm'?50:30,
+  G={mode:gameMode,scoreLimit:({tdm:50,gungame:22,koth:100,infection:30}[gameMode]||30),
     player:null,npcs:[],bullets:[],explosions:[],dmgNums:[],
     cam:{x:2500,y:2500},scores:{},
     gameOver:false,winner:null,
@@ -4233,15 +4545,17 @@ function startGameFromLobby(){
   forestTrees=[];
 
   // Choose map from currentPendingMap (set by server on create_room / game_start)
-  // In solo mode fall back to selectedServer map or random
+  // In solo mode, currentPendingMap is already set by launchSoloPractice from _soloSettings.map
   let _mapToUse = currentPendingMap;
-  if(!currentRoomId){
+  if(!currentRoomId && selectedServer && !_soloSettings.map){
+    // Legacy path: offline server browser join (not solo practice modal)
     const srvName=(selectedServer?.name||'').toUpperCase();
     if(srvName.includes('FOREST')||srvName.includes('WOOD')||srvName.includes('JUNGLE')) _mapToUse='forest';
     else if(selectedServer?.map) _mapToUse=selectedServer.map;
   }
   speedPads=[];
   if(_mapToUse==='forest') generateForestMap();
+  else if(_mapToUse==='volcano') generateVolcanoMap();
   else generateMap();
   const psp=getSpawnPoint([]);
   G.player=createPlayer(psp.x,psp.y);
@@ -4379,6 +4693,7 @@ function openSoloModal(){
         <div id="soloMapBtns" style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="crm-pill on" data-val="city" onclick="setSoloPick('map','city',this)">🏙️ CITY</button>
           <button class="crm-pill" data-val="forest" onclick="setSoloPick('map','forest',this)">🌲 FOREST</button>
+          <button class="crm-pill" data-val="volcano" onclick="setSoloPick('map','volcano',this)">🌋 VOLCANO</button>
         </div>
       </div>
 
@@ -4388,6 +4703,8 @@ function openSoloModal(){
           <button class="crm-pill on" data-val="ffa" onclick="setSoloPick('mode','ffa',this)">⚔️ FFA</button>
           <button class="crm-pill" data-val="tdm" onclick="setSoloPick('mode','tdm',this)">🛡️ TDM</button>
           <button class="crm-pill" data-val="gungame" onclick="setSoloPick('mode','gungame',this)">🔫 GUN GAME</button>
+          <button class="crm-pill" data-val="koth" onclick="setSoloPick('mode','koth',this)">👑 KOTH</button>
+          <button class="crm-pill" data-val="infection" onclick="setSoloPick('mode','infection',this)">🦠 INFECTION</button>
         </div>
       </div>
 
@@ -4447,6 +4764,9 @@ const SOLO_BOT_SKILL = { easy: 0.05, medium: 0.45, hard: 0.78, insane: 0.98 };
 const SOLO_BOT_COUNT = { easy: 7, medium: 11, hard: 11, insane: 11 };
 
 function launchSoloPractice(){
+  // Apply global bot difficulty
+  const skillOverride = _BOT_SKILL_MAP[_globalBotDiff] || 0.45;
+
   const modal = document.getElementById('soloModal');
   if(modal) modal.style.display = 'none';
 
@@ -4468,7 +4788,8 @@ function launchSoloPractice(){
 
   gameMode = _soloSettings.mode;
   G.mode   = _soloSettings.mode;
-  G.scoreLimit = _soloSettings.mode==='tdm' ? 50 : _soloSettings.mode==='gungame' ? 22 : 20;
+  const _modeScoreLimits = { tdm:50, gungame:22, koth:100, infection:30, ffa:30 };
+  G.scoreLimit = _modeScoreLimits[_soloSettings.mode] || 30;
   currentPendingMap = _soloSettings.map;
 
   startGameFromLobby();
@@ -4669,6 +4990,7 @@ function loadSettings(){
     if (s.colorblind) applyColorblindMode(true);
     // mobile controls removed
     if (s.nuke !== false) nukeEnabled = true; else nukeEnabled = false;
+    if (s.botDiff !== undefined) { _globalBotDiff=parseInt(s.botDiff)||2; const el=document.getElementById('stBotDiff'); if(el)el.value=_globalBotDiff; }
     if (s.username) {
       playerName = s.username;
       const mu = document.getElementById('menuUsername');
@@ -5013,7 +5335,7 @@ window.startGameFromLobby = function(){
   document.getElementById('rvYesBtn').textContent = '✓ REMATCH';
   document.getElementById('hudGunGame').style.display = 'none';
   _ggLastKills = 0; // reset gun game kill counter for new game
-  setTimeout(()=>{ initGunGame(); }, 100);
+  setTimeout(()=>{ initGunGame(); initKOTH(); initInfectionMode(); }, 100);
 };
 
 // ─── HOOK KILL EVENTS FOR GUN GAME ─────────────────────────────
@@ -6041,6 +6363,844 @@ window.startGameFromLobby = function(){
 
 // ─── END NEW FEATURES ─────────────────────────────────────────────
 
+
+// ═══════════════════════════════════════════════════════════════════
+// SLIME WARS — MEGA FEATURE PATCH
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── EXPLOSIVE BARRELS ───────────────────────────────────────────
+let explosiveBarrels = [];
+function spawnExplosiveBarrels() {
+  explosiveBarrels = [];
+  const roads = mapRoads;
+  for (let i = 0; i < 24; i++) {
+    if (!roads.length) break;
+    const rd = roads[Math.floor(Math.random() * roads.length)];
+    const bx = rd.x + 30 + Math.random() * Math.max(1, rd.w - 60);
+    const by = rd.y + 30 + Math.random() * Math.max(1, rd.h - 60);
+    if (obstacles.some(o => circleRect(bx, by, 25, o.x, o.y, o.w, o.h))) continue;
+    explosiveBarrels.push({ x: bx, y: by, r: 14, hp: 40, dead: false });
+  }
+}
+function checkBarrelsForBullets() {
+  if (!explosiveBarrels.length) return;
+  explosiveBarrels.forEach(b => {
+    if (b.dead) return;
+    G.bullets.forEach(bull => {
+      if (bull._dead) return;
+      if (Math.hypot(bull.x - b.x, bull.y - b.y) < b.r + bull.r + 2) {
+        b.hp -= bull.dmg;
+        bull._dead = true;
+        if (b.hp <= 0) detonateBarrel(b);
+      }
+    });
+  });
+}
+function detonateBarrel(b) {
+  if (b.dead) return;
+  b.dead = true;
+  explode(b.x, b.y, 130, 80, G.player);
+  explosiveBarrels.forEach(nb => {
+    if (nb.dead || nb === b) return;
+    if (Math.hypot(nb.x - b.x, nb.y - b.y) < 220)
+      setTimeout(() => detonateBarrel(nb), 120 + Math.random() * 250);
+  });
+}
+function drawBarrels() {
+  explosiveBarrels.forEach(b => {
+    if (b.dead) return;
+    const pulse = Math.sin(G.gameTime * 3.5 + b.x * 0.01) * 0.2 + 0.8;
+    ctx.save(); ctx.translate(b.x, b.y);
+    ctx.beginPath(); ctx.ellipse(3, 7, b.r * 0.85, b.r * 0.4, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${Math.round(185*pulse)},${Math.round(45*pulse)},20)`;
+    ctx.fill(); ctx.strokeStyle = '#7b1a00'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = '#ff9900'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-b.r+3,-3); ctx.lineTo(b.r-3,-3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-b.r+3,3); ctx.lineTo(b.r-3,3); ctx.stroke();
+    ctx.font = '9px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('⚠', 0, 0);
+    ctx.restore(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  });
+}
+
+// ─── STICKY SLIME BOMB ─────────────────────────────────────────────
+let stickyBombs = [];
+function spawnStickyBomb(owner, x, y, vx, vy) {
+  stickyBombs.push({ x, y, vx, vy, r: 9, owner, stuck: false, armed: false, dead: false });
+}
+function updateStickyBombs(dt) {
+  stickyBombs.forEach(b => {
+    if (b.dead) return;
+    if (!b.stuck) {
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      b.vx *= 0.9; b.vy *= 0.9;
+      if (obstacles.some(o => circleRect(b.x, b.y, b.r+4, o.x, o.y, o.w, o.h)) ||
+          b.x<20||b.x>MAP_SIZE-20||b.y<20||b.y>MAP_SIZE-20) {
+        b.stuck = true; b.vx = 0; b.vy = 0;
+        setTimeout(() => { b.armed = true; }, 600);
+      }
+    } else if (b.armed) {
+      const ents = [G.player, ...G.npcs];
+      ents.forEach(e => {
+        if (!e||e.dead||e===b.owner) return;
+        if (Math.hypot(e.x-b.x, e.y-b.y) < b.r + (e.r||18) + 8) {
+          b.dead = true; explode(b.x, b.y, 80, 90, b.owner);
+        }
+      });
+    }
+  });
+  stickyBombs = stickyBombs.filter(b => !b.dead);
+}
+function drawStickyBombs() {
+  stickyBombs.forEach(b => {
+    const pulse = Math.sin(G.gameTime * 6) * 0.35 + 0.65;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = b.armed ? `rgba(0,220,80,${0.7*pulse})` : 'rgba(0,160,50,0.65)';
+    ctx.fill(); ctx.strokeStyle = b.armed ? '#0f0' : '#0a0'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '9px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('💚', b.x, b.y);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  });
+}
+
+
+// ─── KING OF THE HILL ─────────────────────────────────────────────
+// Multi-hill capture-and-hold with timed scoring
+// Teams (or FFA) score points while holding a hill. First to scoreLimit wins.
+const KOTH_WIN=100;
+let kothZones=[]; // array of {x,y,r,captured:-1/teamIdx/null,captureProgress,label}
+let kothScores={p:0,e:0}; // player-team vs enemy-team (or FFA: p=player only)
+let kothHillIdx=0; // active hill index (rotates every 30s)
+let kothHillTimer=30;
+const KOTH_ROTATE_TIME=30;
+
+function initKOTH() {
+  kothZones=[];
+  kothScores={p:0,e:0};
+  kothHillIdx=0;
+  kothHillTimer=KOTH_ROTATE_TIME;
+  if (gameMode !== 'koth') return;
+
+  // Place 3 hills on the map in safe spots spread apart
+  const candidates=G.spawnPoints||[{x:2500,y:2500}];
+  const placed=[];
+  const minDist=600;
+  let attempts=0;
+  while(placed.length<3&&attempts<200){
+    attempts++;
+    const sp=candidates[Math.floor(Math.random()*candidates.length)];
+    const ok=placed.every(p=>Math.hypot(p.x-sp.x,p.y-sp.y)>minDist);
+    if(ok) placed.push({x:sp.x,y:sp.y});
+  }
+  // Fallback positions if not enough spawn points
+  const fallbacks=[{x:2000,y:2000},{x:3000,y:2000},{x:2500,y:3000}];
+  while(placed.length<3) placed.push(fallbacks[placed.length]);
+  const labels=['ALPHA','BRAVO','CHARLIE'];
+  placed.forEach((p,i)=>kothZones.push({x:p.x,y:p.y,r:130,captured:null,captureProgress:0,label:labels[i]}));
+
+  document.getElementById('hudKOTH').style.display='block';
+}
+
+function updateKOTH(dt) {
+  if (!kothZones.length||gameMode!=='koth') return;
+  const zone=kothZones[kothHillIdx];
+  if(!zone) return;
+
+  // Tick active-hill timer — rotate hills
+  kothHillTimer-=dt;
+  if(kothHillTimer<=0){
+    kothHillTimer=KOTH_ROTATE_TIME;
+    zone.captured=null; zone.captureProgress=0;
+    kothHillIdx=(kothHillIdx+1)%kothZones.length;
+    const next=kothZones[kothHillIdx];
+    showNotif(`👑 HILL MOVED: ${next.label}!`,2000);
+    addGChat('SERVER',`👑 Active hill moved to ${next.label}!`);
+  }
+
+  const inZone=e=>e&&!e.dead&&Math.hypot(e.x-zone.x,e.y-zone.y)<zone.r;
+  const pIn=inZone(G.player);
+  const npcsIn=G.npcs.filter(n=>inZone(n)&&!n.dead);
+  const contested=pIn&&npcsIn.length>0;
+
+  // Capture logic
+  const CAPTURE_SPEED=dt*30; // %/s
+  if(!contested){
+    if(pIn){
+      zone.captureProgress=Math.min(100,zone.captureProgress+CAPTURE_SPEED*2);
+      if(zone.captureProgress>=100&&zone.captured!=='player'){
+        zone.captured='player';
+        showNotif(`👑 ${zone.label} CAPTURED!`,1800);
+        addGChat('SERVER',`👑 You captured ${zone.label}!`);
+      }
+    } else if(npcsIn.length>0){
+      zone.captureProgress=Math.max(-100,zone.captureProgress-CAPTURE_SPEED*2*npcsIn.length*.5);
+      if(zone.captureProgress<=-100&&zone.captured!=='enemy'){
+        zone.captured='enemy';
+      }
+    } else {
+      // No one in zone — decay toward neutral
+      if(zone.captureProgress>0) zone.captureProgress=Math.max(0,zone.captureProgress-CAPTURE_SPEED*.5);
+      else if(zone.captureProgress<0) zone.captureProgress=Math.min(0,zone.captureProgress+CAPTURE_SPEED*.5);
+      if(Math.abs(zone.captureProgress)<5) zone.captured=null;
+    }
+  }
+
+  // Score points for captured zone
+  const SCORE_RATE=dt*8; // pts/s while holding
+  if(zone.captured==='player') kothScores.p=Math.min(KOTH_WIN,kothScores.p+SCORE_RATE);
+  else if(zone.captured==='enemy') kothScores.e=Math.min(KOTH_WIN,kothScores.e+SCORE_RATE);
+
+  // HUD
+  const pPct=Math.floor(kothScores.p);
+  const ePct=Math.floor(kothScores.e);
+  const timeLeft=Math.ceil(kothHillTimer);
+  const zoneStatus=zone.captured==='player'?'<span style="color:#39ff14">HELD BY YOU</span>':
+    zone.captured==='enemy'?'<span style="color:#f44">HELD BY ENEMY</span>':
+    contested?'<span style="color:#fa4">CONTESTED</span>':'<span style="color:#888">NEUTRAL</span>';
+  const progressPct=((zone.captureProgress+100)/200*100).toFixed(0);
+  const hud=document.getElementById('hudKOTH');
+  if(hud) hud.innerHTML=`
+    <div style="font-family:'Orbitron';font-size:9px;color:#fa4;letter-spacing:2px;margin-bottom:3px;">👑 KING OF THE HILL</div>
+    <div style="font-size:9px;margin-bottom:2px;">ACTIVE: <b style="color:#ffe000">${zone.label}</b> ${zoneStatus} · ⏱ ${timeLeft}s</div>
+    <div style="display:flex;gap:8px;margin-bottom:3px;font-size:10px;">
+      <span style="color:#39ff14">YOU: ${pPct}</span>
+      <span style="color:#888">/</span>
+      <span style="color:#f44">ENEMY: ${ePct}</span>
+      <span style="color:#fa4;font-size:8px;">/ ${KOTH_WIN}</span>
+    </div>
+    <div style="width:120px;height:5px;background:#111;border:1px solid #333;position:relative;">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:${progressPct}%;background:${zone.captured==='player'?'#39ff14':zone.captured==='enemy'?'#f44':'#fa4'};transition:width .2s;"></div>
+      <div style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#555;"></div>
+    </div>`;
+
+  if(kothScores.p>=KOTH_WIN) endGame(playerName);
+  else if(kothScores.e>=KOTH_WIN) endGame('ENEMIES');
+}
+
+function drawKOTH() {
+  if (!kothZones.length||gameMode!=='koth') return;
+  const t=G.gameTime;
+  kothZones.forEach((zone,i)=>{
+    const isActive=i===kothHillIdx;
+    const pulse=Math.sin(t*(isActive?2.5:1))*0.3+0.7;
+    const col=zone.captured==='player'?'57,255,20':zone.captured==='enemy'?'255,50,50':'250,180,0';
+    const alpha=isActive?(0.12*pulse):0.04;
+    // Fill
+    ctx.beginPath(); ctx.arc(zone.x,zone.y,zone.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${col},${alpha})`; ctx.fill();
+    // Border
+    ctx.strokeStyle=`rgba(${col},${isActive?0.8*pulse:0.3})`; ctx.lineWidth=isActive?3:1.5;
+    ctx.setLineDash(isActive?[12,8]:[6,10]); ctx.stroke(); ctx.setLineDash([]);
+    // Label
+    ctx.font=`bold ${isActive?13:10}px 'Orbitron'`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=`rgba(${col},${isActive?0.9:0.5})`;
+    ctx.fillText(zone.label,zone.x,zone.y-(isActive?18:12));
+    // Crown icon only on active
+    if(isActive){
+      ctx.font='22px serif'; ctx.fillText('👑',zone.x,zone.y+6);
+      // Capture progress arc
+      const prog=(zone.captureProgress+100)/200;
+      ctx.strokeStyle=zone.captured==='player'?'#39ff14':zone.captured==='enemy'?'#f44':'#fa4';
+      ctx.lineWidth=5; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(zone.x,zone.y,zone.r+8,-Math.PI/2,-Math.PI/2+prog*Math.PI*2);
+      ctx.stroke();
+    } else {
+      ctx.font='14px serif'; ctx.fillText('👑',zone.x,zone.y+2);
+    }
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+  });
+}
+
+// ─── LAVA ZONES ──────────────────────────────────────────────────
+let _lavaTickTimer = 0;
+function updateLavaZones(dt) {
+  if (!lavaZones||!lavaZones.length) return;
+  _lavaTickTimer -= dt;
+  if (_lavaTickTimer>0) return;
+  _lavaTickTimer = 0.5;
+  const ents = [G.player, ...G.npcs];
+  ents.forEach(e => {
+    if (!e||e.dead) return;
+    lavaZones.forEach(lz => {
+      if (Math.hypot(e.x-lz.x,e.y-lz.y)<lz.r)
+        dealDamage({name:'LAVA',isPlayer:false,team:-1}, e, lz.dmg);
+    });
+  });
+}
+function drawLavaZones() {
+  if (!lavaZones) return;
+  const t=G.gameTime;
+  lavaZones.forEach(lz => {
+    const p=Math.sin(t*1.4+lz.x*.008+lz.y*.006)*.3+.7;
+    // Core lava — bright orange-yellow
+    const grd=ctx.createRadialGradient(lz.x,lz.y,lz.r*.1,lz.x,lz.y,lz.r);
+    grd.addColorStop(0,`rgba(255,230,60,${0.95*p})`);
+    grd.addColorStop(.25,`rgba(255,120,10,${0.85*p})`);
+    grd.addColorStop(.55,`rgba(220,40,0,${0.6*p})`);
+    grd.addColorStop(.8,`rgba(150,10,0,${0.35*p})`);
+    grd.addColorStop(1,'rgba(80,0,0,0)');
+    ctx.beginPath(); ctx.arc(lz.x,lz.y,lz.r,0,Math.PI*2);
+    ctx.fillStyle=grd; ctx.fill();
+    // Animated bright lava blobs floating on surface
+    const blobCount=lz._caldera?10:6;
+    for(let i=0;i<blobCount;i++){
+      const ang=t*0.6+i*(Math.PI*2/blobCount)+(lz._river?t*.3:0);
+      const rad=lz.r*(lz._caldera?0.55:0.45);
+      const bx=lz.x+Math.cos(ang)*rad*(0.5+Math.sin(t*.8+i)*.4);
+      const by=lz.y+Math.sin(ang)*rad*(0.5+Math.cos(t*.7+i)*.4);
+      const br=4+p*7+Math.sin(t*2+i)*3;
+      ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,${200+Math.floor(p*55)},20,${0.7*p})`; ctx.fill();
+    }
+    // Surface shimmer lines for rivers
+    if(lz._river||lz._caldera){
+      ctx.strokeStyle=`rgba(255,200,30,${0.15*p})`; ctx.lineWidth=2;
+      for(let i=0;i<3;i++){
+        const ang=t*.4+i*2.1;
+        ctx.beginPath();
+        ctx.arc(lz.x+Math.cos(ang)*lz.r*.3,lz.y+Math.sin(ang)*lz.r*.3,lz.r*.35,ang,ang+Math.PI*.7);
+        ctx.stroke();
+      }
+    }
+  });
+}
+
+// ─── SLIME TRAIL ────────────────────────────────────────────────
+let _slimeTrail = [], _trailTimer = 0;
+function updateSlimeTrail(dt) {
+  _trailTimer -= dt;
+  if (_trailTimer <= 0 && G.player && !G.player.dead) {
+    _trailTimer = 0.06;
+    const col = BODY_COLORS[playerSkin]?.color || '#39d614';
+    _slimeTrail.push({x:G.player.x,y:G.player.y,t:1.4,col});
+  }
+  _slimeTrail.forEach(t=>t.t-=dt*1.5);
+  _slimeTrail = _slimeTrail.filter(t=>t.t>0);
+}
+function drawSlimeTrail() {
+  _slimeTrail.forEach(t=>{
+    const a=Math.min(0.28,t.t*0.22);
+    const r=12*(t.t/1.4);
+    ctx.beginPath(); ctx.arc(t.x,t.y,r,0,Math.PI*2);
+    // parse color to rgba
+    const c = t.col.startsWith('#') ? hexToRgba(t.col,a) : `rgba(57,214,20,${a})`;
+    ctx.fillStyle=c; ctx.fill();
+  });
+}
+function hexToRgba(hex,a){
+  const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ─── ANIMATED EMOTES ────────────────────────────────────────────
+const _EMOTES=['💀','👋','🔥','😂','🎉','🤣','🫡','💪'];
+let _emoteKeyDown=false;
+function showPlayerEmote(emoji){
+  playerTaunt={emoji,t:2.2};
+  if(currentRoomId) wsSend({type:'taunt',emoji});
+}
+// Emote wheel
+function openEmoteWheel(){
+  const el=document.getElementById('emoteWheel');
+  if(el) el.style.display=el.style.display==='flex'?'none':'flex';
+}
+
+// ─── LOW HP HEARTBEAT ────────────────────────────────────────────
+let _heartPlaying=false;
+function updateHeartbeat(){
+  if(!G.player) return;
+  const low=G.player.hp<=25&&!G.player.dead;
+  const sg=document.getElementById('sGame');
+  if(low){
+    if(!_heartPlaying){ _heartPlaying=true; sg?.classList.add('low-hp'); _doHeartbeat(); }
+  } else { _heartPlaying=false; sg?.classList.remove('low-hp'); }
+}
+function _doHeartbeat(){
+  if(!_heartPlaying) return;
+  playTone(55,'sine',0.09,0.14); setTimeout(()=>{ if(_heartPlaying){playTone(65,'sine',0.09,0.14); setTimeout(_doHeartbeat,700);}},130);
+}
+
+// ─── KILL STREAK ANNOUNCER ──────────────────────────────────────
+const _STREAK_CALLS=[[2,'DOUBLE KILL',false],[3,'TRIPLE KILL',false],[4,'QUAD KILL',false],[5,'KILLING SPREE!',true],[7,'RAMPAGE!',true],[10,'UNSTOPPABLE!',true],[15,'GODLIKE!',true]];
+function announceKillStreak(count){
+  const entry=_STREAK_CALLS.slice().reverse().find(e=>count===e[0]);
+  if(!entry) return;
+  const[,text,mega]=entry;
+  const el=document.createElement('div');
+  el.className='streak-announce'+(mega?' mega':''); el.textContent=text;
+  const c=document.getElementById('hudStreakAnnounce');
+  if(c){c.appendChild(el);setTimeout(()=>el.remove(),2700);}
+  // Synth voice
+  for(let i=0;i<Math.min(text.length,10);i++){
+    const freq=160+(text.charCodeAt(i%text.length)%10)*28;
+    setTimeout(()=>playTone(freq,'sawtooth',0.07,0.18,(i%3-1)*40),i*75);
+  }
+}
+
+// ─── POST-MATCH STATS ────────────────────────────────────────────
+let _mStats={dmg:0,shots:0,hits:0,wKills:{},peakStreak:0};
+function resetMatchStats(){_mStats={dmg:0,shots:0,hits:0,wKills:{},peakStreak:0};}
+function recordShot(wname){_mStats.shots++;_mStats.wKills[wname]=(_mStats.wKills[wname]||0);}
+function recordHitDmg(dmg,wname){_mStats.hits++;_mStats.dmg+=dmg;if(wname)_mStats.wKills[wname]=(_mStats.wKills[wname]||0)+1;}
+function showPostMatchCard(){
+  const acc=_mStats.shots>0?((_mStats.hits/_mStats.shots)*100).toFixed(1):'0.0';
+  const best=Object.entries(_mStats.wKills).sort((a,b)=>b[1]-a[1])[0]?.[0]||'PISTOL';
+  const el=document.getElementById('postMatchCard');
+  if(!el)return;
+  document.getElementById('postMatchContent').innerHTML=`
+    <div>🎯 Accuracy: <strong style="color:#39ff14">${acc}%</strong></div>
+    <div>💢 Damage Dealt: <strong style="color:#f97316">${_mStats.dmg}</strong></div>
+    <div>🏆 Best Weapon: <strong style="color:#fbbf24">${best}</strong></div>
+    <div>🔥 Peak Streak: <strong style="color:#f44">${_mStats.peakStreak}</strong></div>`;
+  el.style.display='block';
+}
+
+// ─── SPECTATOR MODE ──────────────────────────────────────────────
+let _spectMode=false, _spectTarget=null;
+function enterSpectatorMode(){
+  _spectMode=true;
+  const el=document.getElementById('hudSpectate');
+  if(el)el.style.display='block';
+  _buildSpectList();
+}
+function exitSpectatorMode(){
+  _spectMode=false;
+  const el=document.getElementById('hudSpectate');
+  if(el)el.style.display='none';
+  _spectTarget=null;
+}
+function _buildSpectList(){
+  const el=document.getElementById('spectateList');
+  if(!el)return;
+  const alive=G.npcs.filter(n=>!n.dead);
+  el.innerHTML=alive.map((n,i)=>`<span class="spec-btn" onclick="_spectTarget=G.npcs.filter(x=>!x.dead)[${i}]" style="cursor:pointer;padding:3px 8px;background:rgba(0,0,0,.6);border:1px solid #3af;color:#3af;font-size:10px;letter-spacing:1px;margin:2px;">${n.name}</span>`).join('');
+}
+
+// ─── VOTE KICK ───────────────────────────────────────────────────
+let _vkActive=false,_vkTarget='',_vkVotes=0,_vkTotal=0,_vkTimer=0;
+function initiateVoteKick(name){
+  if(_vkActive)return;
+  _vkActive=true;_vkTarget=name;_vkVotes=1;_vkTotal=Math.max(2,lobbyPlayers.length);
+  const el=document.getElementById('hudVoteKick');
+  if(el){el.style.display='flex';document.getElementById('voteKickName').textContent=name;document.getElementById('voteKickCount').textContent=`${_vkVotes}/${_vkTotal}`;}
+  if(currentRoomId) wsSend({type:'vote_kick_start',targetName:name});
+  _vkTimer=20;
+}
+function voteKickYes(){
+  if(!_vkActive)return;
+  _vkVotes++;document.getElementById('voteKickCount').textContent=`${_vkVotes}/${_vkTotal}`;
+  if(_vkVotes>=Math.ceil(_vkTotal/2)) resolveVoteKick(true);
+}
+function resolveVoteKick(passed){
+  _vkActive=false;
+  const el=document.getElementById('hudVoteKick');
+  if(el)el.style.display='none';
+  if(passed){showNotif(`⛔ ${_vkTarget} WAS KICKED BY VOTE`);if(currentRoomId)wsSend({type:'vote_kick_result',targetName:_vkTarget,passed:true});}
+}
+
+// ─── DAILY CHALLENGES ────────────────────────────────────────────
+const _CPOOL=[
+  {id:'c_boom',text:'Get 3 kills with the Boomerang',goal:3,key:'boomerang_kills',xp:300},
+  {id:'c_noarm',text:'Win a round without picking up armor',goal:1,key:'win_no_armor',xp:400},
+  {id:'c_knife',text:'Get 5 melee kills',goal:5,key:'melee_kills',xp:350},
+  {id:'c_snipe',text:'Get 3 kills with the Sniper',goal:3,key:'sniper_kills',xp:300},
+  {id:'c_games',text:'Complete 3 full matches',goal:3,key:'games_played',xp:250},
+  {id:'c_streak',text:'Achieve a 5-kill streak',goal:5,key:'streak_goal',xp:500},
+  {id:'c_dmg',text:'Deal 1000 total damage in a match',goal:1000,key:'dmg_dealt',xp:350},
+  {id:'c_grenade',text:'Get 2 kills with grenades',goal:2,key:'grenade_kills',xp:300},
+];
+function getDailyChallenges(){
+  const today=new Date().toDateString();
+  try{const s=JSON.parse(localStorage.getItem('sw_daily')||'{}');if(s.date===today)return s.challenges;}catch(e){}
+  const seed=new Date().getDate()+new Date().getMonth()*31;
+  const picked=[],pool=[..._CPOOL];
+  for(let i=0;i<3&&pool.length;i++){const idx=(seed*(i+7))%pool.length;picked.push({...pool.splice(idx,1)[0],progress:0,done:false});}
+  try{localStorage.setItem('sw_daily',JSON.stringify({date:today,challenges:picked}));}catch(e){}
+  return picked;
+}
+function updateDailyChallenge(key,amount=1){
+  try{
+    const today=new Date().toDateString();
+    const s=JSON.parse(localStorage.getItem('sw_daily')||'{}');
+    if(s.date!==today||!s.challenges)return;
+    s.challenges.forEach(c=>{
+      if(c.done)return;
+      if(c.key===key){c.progress=Math.min(c.goal,(c.progress||0)+amount);
+        if(c.progress>=c.goal){c.done=true;showNotif(`✅ CHALLENGE: ${c.text} (+${c.xp} XP)`);_addXP(c.xp);}}
+    });
+    localStorage.setItem('sw_daily',JSON.stringify(s));
+  }catch(e){}
+}
+function showDailyChallenges(){
+  const challenges=getDailyChallenges();
+  const list=document.getElementById('dailyList');
+  if(list){
+    list.innerHTML=challenges.map(c=>`
+      <div style="background:rgba(5,15,35,.9);border:1px solid ${c.done?'#39ff14':'#1e3a5a'};padding:12px 18px;border-radius:4px;">
+        <div style="font-size:11px;color:${c.done?'#39ff14':'#ccc'};letter-spacing:1px;">${c.done?'✅':''} ${c.text}</div>
+        <div style="margin-top:5px;display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;height:5px;background:rgba(0,0,0,.5);border:1px solid #1a3050;border-radius:3px;">
+            <div style="height:100%;width:${Math.min(100,(c.progress/c.goal)*100).toFixed(0)}%;background:${c.done?'#39ff14':'#f97316'};border-radius:3px;transition:width .3s;"></div>
+          </div>
+          <span style="font-size:10px;color:#3a6a8a;">${c.progress}/${c.goal}</span>
+          <span style="font-size:10px;color:#fbbf24;">+${c.xp}XP</span>
+        </div>
+      </div>`).join('');
+  }
+  const panel=document.getElementById('dailyChallengePanel');
+  if(panel) panel.style.display='flex';
+}
+
+// ─── PERSISTENT XP + LEVELS ─────────────────────────────────────
+function _getXP(){try{return JSON.parse(localStorage.getItem('sw_xp')||'{"xp":0,"level":1}');}catch(e){return{xp:0,level:1};}}
+function _saveXP(d){try{localStorage.setItem('sw_xp',JSON.stringify(d));}catch(e){}}
+function _addXP(amt){
+  const d=_getXP(); d.xp+=amt;
+  const xpPerLvl=500;
+  const newLvl=Math.floor(d.xp/xpPerLvl)+1;
+  if(newLvl>d.level){
+    d.level=newLvl;
+    const el=document.getElementById('hudLvlUp');
+    if(el){el.textContent=`⬆ LEVEL ${newLvl}!`;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3000);}
+    showNotif(`🏆 LEVEL UP! Now level ${newLvl}`);
+  }
+  _saveXP(d);updateXPHUD();
+}
+
+// ─── BOT DIFFICULTY FROM SETTINGS ────────────────────────────────
+let _globalBotDiff=2;
+function updateBotDifficulty(v){
+  _globalBotDiff=parseInt(v);
+  saveSettings();
+}
+const _BOT_SKILL_MAP=[0,0.05,0.3,0.65,0.85,0.98];
+
+// ─── POSITIONAL AUDIO ────────────────────────────────────────────
+function playPositionalShot(type,srcX,srcY){
+  if(!document.getElementById('tgPositional')?.classList.contains('on')) return SND[type]?.();
+  if(!G.player) return SND[type]?.();
+  const dx=srcX-G.player.x, dy=srcY-G.player.y;
+  const dist=Math.hypot(dx,dy);
+  if(dist>1000) return;
+  const vol=Math.max(0.02,0.2*(1-dist/1000));
+  const pan=Math.max(-1,Math.min(1,dx/500));
+  if(AC.state==='suspended') AC.resume();
+  const o=AC.createOscillator(),g=AC.createGain(),panner=AC.createPanner();
+  panner.panningModel='equalpower';
+  panner.setPosition(pan,0,0);
+  o.type='sawtooth'; o.frequency.value=type==='sniper'?180:type==='shotgun'?200:400;
+  g.gain.setValueAtTime(vol,AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+0.1);
+  o.connect(g); g.connect(panner); panner.connect(masterGain);
+  o.start(); o.stop(AC.currentTime+0.12);
+}
+
+// ─── CUSTOM KILL SPLASH ──────────────────────────────────────────
+let _killSplashColor = null; // null = default (victim color)
+function initKillColorPicker(){
+  const row=document.getElementById('killColorRow');
+  if(!row)return;
+  const colors=['#39ff14','#ff3939','#3af','#f97316','#ffe000','#ff69b4','#a0f'];
+  colors.forEach(col=>{
+    const d=document.createElement('div');
+    d.style.cssText=`width:20px;height:20px;border-radius:50%;background:${col};cursor:pointer;border:2px solid ${_killSplashColor===col?'#fff':'transparent'}`;
+    d.onclick=()=>{
+      _killSplashColor=_killSplashColor===col?null:col;
+      document.querySelectorAll('#killColorRow div').forEach(x=>x.style.borderColor='transparent');
+      if(_killSplashColor) d.style.borderColor='#fff';
+      saveSettings();
+    };
+    row.appendChild(d);
+  });
+}
+
+// ─── GRENADE COOKING ─────────────────────────────────────────────
+let _grenadeCookTime=0, _grenadeCooking=false;
+const _GRENADE_MAX_COOK=3.0;
+function updateGrenadeCook(dt){
+  if(!G.player||G.player.dead)return;
+  const pw=playerWeapon();
+  if(!pw||!pw.def.throwable)return;
+  if(mouse.down){
+    _grenadeCooking=true; _grenadeCookTime=Math.min(_GRENADE_MAX_COOK,_grenadeCookTime+dt);
+  } else if(_grenadeCooking){
+    _grenadeCooking=false;
+    // Pass cook ratio to next throw — handled by setting a global
+    _grenadeForceThrow=true; _grenadeCookRatio=_grenadeCookTime/_GRENADE_MAX_COOK;
+    _grenadeCookTime=0;
+  }
+}
+let _grenadeForceThrow=false, _grenadeCookRatio=0;
+
+// ─── INFECTION MODE ──────────────────────────────────────────────
+// One NPC starts infected (team 1 = infected). Infected players/NPCs must
+// infect survivors (team 0). Survivors win if any survive until time runs out.
+// Infected win by converting all survivors.
+let _infTimer=0;
+const _INF_TIME=90;
+let _infTimeLeft=_INF_TIME;
+let _infPhase='running';
+// Track which NPCs are permanently dead (not just waiting to respawn) in infection
+// In infection: killed survivors are DEAD DEAD (eliminated). Infected cannot die permanently — they respawn.
+
+function isInfection(){return gameMode==='infection';}
+
+function initInfectionMode(){
+  _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running';
+  if(!isInfection()||!G.npcs.length)return;
+
+  G.player.team=0;
+  G.npcs.forEach(n=>{ n.team=0; n._infected=false; n.dead=false; n.hp=n.maxHp; });
+
+  // 1 NPC starts infected — pick one far from player
+  const sorted=[...G.npcs].sort((a,b)=>Math.hypot(b.x-G.player.x,b.y-G.player.y)-Math.hypot(a.x-G.player.x,a.y-G.player.y));
+  _setInfected(sorted[0]);
+  showNotif('🦠 INFECTION! Survive 90 seconds!',3000);
+  addGChat('SERVER','🦠 Survivors: last 90s to win! Infected: eliminate all survivors!');
+  document.getElementById('hudKOTH').style.display='block';
+}
+
+function _setInfected(npc){
+  npc.team=1; npc._infected=true;
+  npc.skin=2; npc._infGlow=true;
+  npc.dead=false; npc.hp=npc.maxHp; // infected respawn at full HP
+}
+
+function _infectPlayer(){
+  if(!G.player||G.player.team===1)return;
+  G.player.team=1;
+  showNotif('🦠 YOU ARE INFECTED! Hunt survivors!',3000);
+  addGChat('SERVER',`🦠 ${playerName} has been infected!`);
+  G.shakeX=20; G.shakeY=20;
+  const v=document.getElementById('hudVignette');
+  if(v){ v.style.background='radial-gradient(ellipse at center,transparent 30%,rgba(0,200,0,.85) 100%)'; setTimeout(()=>v.style.background='',1200); }
+}
+
+function updateInfection(dt){
+  if(!isInfection()||_infPhase!=='running')return;
+  _infTimeLeft=Math.max(0,_infTimeLeft-dt);
+
+  // Infected NPCs respawn quickly (5s), survivors are permanently eliminated
+  G.npcs.forEach(n=>{
+    if(!n.dead)return;
+    if(n.team===1){
+      // Infected respawn
+      n.respawnTimer=(n.respawnTimer||0)-dt;
+      if(n.respawnTimer<=0){
+        const sp=getSpawnPoint(G.npcs.filter(x=>!x.dead&&x!==n));
+        n.x=sp.x; n.y=sp.y; n.dead=false; n.hp=n.maxHp; n.armor=0;
+        n.respawnTimer=5;
+      }
+    }
+    // Survivors stay dead (permanently eliminated)
+  });
+
+  // Count living survivors and infected
+  const survivorNPCs=G.npcs.filter(n=>!n.dead&&n.team===0);
+  const playerAlive=G.player&&!G.player.dead;
+  const playerSurvivor=playerAlive&&G.player.team===0;
+  const totalSurvivors=survivorNPCs.length+(playerSurvivor?1:0);
+  const infectedNPCs=G.npcs.filter(n=>!n.dead&&n.team===1);
+  const totalInfected=infectedNPCs.length+(playerAlive&&G.player.team===1?1:0);
+
+  // Touch-infection: infected who touch survivors infect them
+  infectedNPCs.forEach(inf=>{
+    survivorNPCs.forEach(sur=>{
+      if(Math.hypot(inf.x-sur.x,inf.y-sur.y)<inf.r+sur.r+8){
+        _setInfected(sur);
+        addGChat('SERVER',`🦠 ${sur.name} was infected!`);
+      }
+    });
+    if(playerSurvivor&&Math.hypot(inf.x-G.player.x,inf.y-G.player.y)<inf.r+G.player.r+8){
+      _infectPlayer();
+    }
+  });
+
+  // Win conditions
+  if(totalSurvivors===0){
+    _infPhase='over';
+    endGame('INFECTED WIN');
+    return;
+  }
+  if(_infTimeLeft<=0){
+    _infPhase='over';
+    endGame(playerSurvivor?playerName+' & SURVIVORS WIN':'SURVIVORS WIN');
+    return;
+  }
+
+  // HUD
+  const tStr=Math.ceil(_infTimeLeft)+'s';
+  const urgency=_infTimeLeft<20?'color:#f44':_infTimeLeft<40?'color:#fa4':'color:#4f4';
+  const hud=document.getElementById('hudKOTH');
+  if(hud) hud.innerHTML=`
+    <div style="font-family:'Orbitron';font-size:9px;color:#39ff14;letter-spacing:2px;margin-bottom:3px;">🦠 INFECTION</div>
+    <div style="font-size:11px;margin-bottom:3px;"><span style="${urgency}">⏱ ${tStr}</span></div>
+    <div style="display:flex;gap:10px;font-size:10px;margin-bottom:3px;">
+      <span style="color:#4f4">🟢 ${totalSurvivors} surviving</span>
+      <span style="color:#f44">🦠 ${totalInfected} infected</span>
+    </div>
+    <div style="font-size:10px;font-weight:bold;color:${G.player.team===0?'#39ff14':'#f44'}">
+      ${G.player.team===0?'🟢 YOU: SURVIVOR':'🦠 YOU: INFECTED'}
+    </div>`;
+}
+
+function checkInfectOnKill(killer, victim){
+  if(!isInfection())return;
+  // When an infected entity kills a survivor via bullet, infect them instead of kill
+  if(killer&&killer.team===1&&victim&&victim.team===0){
+    if(victim.isPlayer){
+      _infectPlayer();
+      // Undo death — player got infected, not killed
+      if(G.player.dead){ G.player.dead=false; G.player.hp=60; }
+    } else {
+      // NPC survivor was shot by infected — infect them
+      _setInfected(victim);
+      addGChat('SERVER',`🦠 ${victim.name} was infected by a bullet!`);
+    }
+  }
+}
+
+function infectOnKill(killerIdx){ /* legacy stub */ }
+
+// ─── EMOTE WHEEL HTML ────────────────────────────────────────────
+(function buildEmoteWheel(){
+  const wheel=document.createElement('div');
+  wheel.id='emoteWheel';
+  wheel.style.cssText='display:none;position:absolute;bottom:180px;right:20px;flex-wrap:wrap;gap:6px;background:rgba(0,0,0,.85);border:1px solid #3af;padding:10px;border-radius:6px;z-index:200;width:130px;';
+  _EMOTES.forEach(em=>{
+    const btn=document.createElement('button');
+    btn.style.cssText='background:rgba(0,20,50,.8);border:1px solid #1e3050;font-size:20px;width:52px;height:52px;cursor:pointer;border-radius:4px;';
+    btn.textContent=em; btn.onclick=()=>{showPlayerEmote(em);wheel.style.display='none';};
+    wheel.appendChild(btn);
+  });
+  document.getElementById('sGame')?.appendChild(wheel);
+  // E key opens emote wheel
+})();
+
+// ─── HOOK EMOTE / POSITIONAL / ANNOUNCER / STATS INTO GAMEPLAY ───
+// Patch killEntity to call announcer, XP, daily challenges
+const __origKillEntity=killEntity;
+window.killEntity=function(killer,victim){
+  __origKillEntity(killer,victim);
+  checkInfectOnKill(killer,victim);
+  if(killer.isPlayer){
+    _mStats.peakStreak=Math.max(_mStats.peakStreak,_killStreakCount||0);
+    announceKillStreak(G.player.kills);
+    _addXP(50);
+    updateDailyChallenge('games_played',0); // not here, but track weapon-specific
+    const wname=playerWeapon()?.def?.name||'?';
+    if(wname==='BOOMERANG') updateDailyChallenge('boomerang_kills');
+    if(wname==='SNIPER'||wname==='SNIPER RIFLE') updateDailyChallenge('sniper_kills');
+    if(wname==='KNIFE'||wname==='CHAINSAW') updateDailyChallenge('melee_kills');
+    if(wname==='GRENADE') updateDailyChallenge('grenade_kills');
+    if(_killStreakCount>=5) updateDailyChallenge('streak_goal',_killStreakCount);
+  }
+};
+
+// Patch dealDamage to record stats
+const __origDealDamage=dealDamage;
+window.dealDamage=function(attacker,victim,dmg){
+  if(attacker.isPlayer){
+    recordHitDmg(dmg, playerWeapon()?.def?.name);
+    updateDailyChallenge('dmg_dealt',dmg);
+  }
+  __origDealDamage(attacker,victim,dmg);
+};
+
+// Patch endGame to show post-match stats
+const __origEndGame=endGame;
+window.endGame=function(winner){
+  __origEndGame(winner);
+  _addXP(200);
+  updateDailyChallenge('games_played');
+  setTimeout(showPostMatchCard, 800);
+  resetMatchStats();
+};
+
+// Patch updatePlayer to also tick new features
+const __origUpdatePlayer=window.updatePlayer||updatePlayer;
+window.updatePlayer=function(dt){
+  __origUpdatePlayer(dt);
+  updateSlimeTrail(dt);
+  updateHeartbeat();
+  updateGrenadeCook(dt);
+  updateKOTH(dt);
+  updateInfection(dt);
+  updateLavaZones(dt);
+  updateStickyBombs(dt);
+  checkBarrelsForBullets();
+};
+
+// Patch render to draw new things
+const __origRender2=render;
+render=function(){
+  __origRender2();
+  if(ctx&&G&&!G.gameOver&&document.getElementById('sGame').classList.contains('active')){
+    const offX=Math.round(canvas.width/2-G.cam.x+(G.shakeX||0));
+    const offY=Math.round(canvas.height/2-G.cam.y+(G.shakeY||0));
+    ctx.save(); ctx.translate(offX,offY);
+    drawSlimeTrail();
+    drawLavaZones();
+    drawBarrels();
+    drawStickyBombs();
+    drawKOTH();
+    ctx.restore();
+  }
+};
+
+// ─── KEY BINDINGS FOR NEW FEATURES ───────────────────────────────
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('sGame').classList.contains('active'))return;
+  // Emote wheel: E key
+  if(e.key==='e'||e.key==='E'){
+    const ew=document.getElementById('emoteWheel');
+    if(ew)ew.style.display=ew.style.display==='flex'?'none':'flex';
+  }
+  // Emote shortcuts: Z=wave, X=taunt, C already=slide; use V=flame
+  if(e.key==='z'||e.key==='Z') showPlayerEmote('👋');
+  if(e.key==='v'||e.key==='V') showPlayerEmote('🔥');
+  // Sticky bomb: middle mouse or B
+  if(e.key==='b'||e.key==='B'){
+    if(G.player&&!G.player.dead){
+      const spd=280;
+      const ang=G.player.angle;
+      spawnStickyBomb(G.player,G.player.x+Math.cos(ang)*22,G.player.y+Math.sin(ang)*22,Math.cos(ang)*spd,Math.sin(ang)*spd);
+    }
+  }
+});
+
+// ─── BOT ARCHETYPES ──────────────────────────────────────────────
+// Rusher: beeline at enemy; Sniper: hold distance; Flanker: circle
+function applyBotArchetype(npc){
+  const types=['rusher','sniper','flanker'];
+  npc.archetype=types[Math.floor(Math.random()*types.length)];
+}
+
+// ─── FILL WITH BOTS ──────────────────────────────────────────────
+let _fillBotsEnabled=false;
+function toggleFillBots(){
+  _fillBotsEnabled=!_fillBotsEnabled;
+  const btn=document.getElementById('fillBotsBtn');
+  if(btn){btn.textContent=_fillBotsEnabled?'✅ FILL BOTS ON':'☐ FILL WITH BOTS';btn.style.borderColor=_fillBotsEnabled?'#39ff14':'#1e3a5a';}
+  if(_fillBotsEnabled&&lobbyPlayers.filter(p=>!p.isNPC).length<12){
+    const needed=12-lobbyPlayers.length;
+    const used=new Set(lobbyPlayers.map(p=>p.name));
+    for(let i=0;i<needed;i++){
+      let nm;do{nm=NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)];}while(used.has(nm));
+      used.add(nm);
+      lobbyPlayers.push({name:nm,skin:Math.floor(Math.random()*BODY_COLORS.length),ready:true,isNPC:true,_forcedSkill:_BOT_SKILL_MAP[_globalBotDiff]||0.45});
+    }
+    renderLobbyPlayers();
+    showNotif('🤖 Lobby filled with bots!');
+  }
+}
+
+// ─── INIT CALL ───────────────────────────────────────────────────
+initKillColorPicker();
+// Load bot difficulty from settings
+try{const s=JSON.parse(localStorage.getItem('slimeWarsSettings')||'{}');if(s.botDiff){_globalBotDiff=parseInt(s.botDiff)||2;const el=document.getElementById('stBotDiff');if(el)el.value=_globalBotDiff;}}catch(e){}
+
 document.addEventListener('click', function startMusicOnce(){
   MUS.startMenu();
   document.removeEventListener('click', startMusicOnce);
@@ -6050,5 +7210,50 @@ setTimeout(()=>{
   const el=document.getElementById('onlinePcount'); if(el)el.textContent=t+1;
 },100);
 </script>
+
+<!-- VOTE KICK HUD -->
+<div id="hudVoteKick" style="display:none;position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);background:rgba(5,12,25,.97);border:2px solid #f44;padding:22px 32px;z-index:500;flex-direction:column;align-items:center;gap:10px;">
+  <div style="font-family:'Orbitron';font-size:14px;color:#f44;letter-spacing:3px;">VOTE KICK</div>
+  <div style="font-size:12px;color:#ccc;">Kick <span id="voteKickName" style="color:#f97316;font-weight:bold;">Player</span>?</div>
+  <div id="voteKickCount" style="font-family:'Orbitron';font-size:18px;color:#fff;">0/4</div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn" onclick="voteKickYes()" style="border-color:#4f4;color:#4f4;">✓ YES</button>
+    <button class="btn" onclick="resolveVoteKick(false)" style="border-color:#f44;color:#f44;">✗ NO</button>
+  </div>
+</div>
+
+<!-- SPECTATOR HUD -->
+<div id="hudSpectate" style="display:none;position:absolute;bottom:180px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);border:1px solid #3af;padding:8px 16px;z-index:200;text-align:center;">
+  <div style="font-size:9px;color:#3af;letter-spacing:2px;margin-bottom:5px;">👁 SPECTATING — CLICK A PLAYER</div>
+  <div id="spectateList" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;"></div>
+</div>
+
+<!-- KOTH HUD -->
+<div id="hudKOTH" style="display:none;position:absolute;top:56px;right:16px;background:rgba(5,12,25,.88);border:1px solid #fa4;padding:6px 14px;text-align:right;font-family:'Share Tech Mono';font-size:11px;letter-spacing:1px;pointer-events:none;"></div>
+
+<!-- DAILY CHALLENGES HUD (menu overlay) -->
+<div id="dailyChallengePanel" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);z-index:800;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
+  <div style="font-family:'Orbitron';font-size:22px;color:#fbbf24;letter-spacing:3px;margin-bottom:6px;">📅 DAILY CHALLENGES</div>
+  <div id="dailyList" style="display:flex;flex-direction:column;gap:10px;min-width:360px;"></div>
+  <button class="btn" onclick="document.getElementById('dailyChallengePanel').style.display='none'">✕ CLOSE</button>
+</div>
+
+<!-- POST MATCH STATS CARD -->
+<div id="postMatchCard" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,12,25,.98);border:1px solid #fbbf24;padding:28px 40px;z-index:150;text-align:center;min-width:320px;">
+  <div style="font-family:'Orbitron';font-size:16px;color:#fbbf24;letter-spacing:3px;margin-bottom:14px;">📊 MATCH STATS</div>
+  <div id="postMatchContent" style="font-size:12px;line-height:2;color:#ccc;"></div>
+  <button class="btn" onclick="document.getElementById('postMatchCard').style.display='none'" style="margin-top:14px;">CLOSE</button>
+</div>
+
+<!-- LOW HP OVERLAY -->
+<style>
+  #sGame.low-hp::after {
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at center,transparent 40%,rgba(255,0,0,0.35) 100%);
+    animation:lpulse 0.7s infinite alternate;z-index:90;
+  }
+  @keyframes lpulse{0%{opacity:0.5;}100%{opacity:1;}}
+</style>
+
 </body>
 </html>
