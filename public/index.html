@@ -564,7 +564,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <button class="menu-btn" onclick="showScreen('sAttach')">🔧 WEAPON LOADOUT</button>
       <button class="menu-btn" onclick="showScreen('sSkins')">🎨 CUSTOMIZE</button>
       <button class="menu-btn" onclick="openMatchHistory()">📊 MATCH HISTORY</button>
-      <button class="menu-btn" onclick="showDailyChallenges()">📅 DAILY CHALLENGES</button>
       <button class="menu-btn" onclick="showScreen('sSettings')">⚙ SETTINGS</button>
       <a class="menu-btn" href="https://slimey2017.itch.io/slimeys-battle-royale-online" target="_blank" style="text-decoration:none;">Try Out This Online Game!😜</a>
     </div>
@@ -688,7 +687,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     </div>
 
     <!-- Inline create room panel -->
-    <div id="createRoomPanel" style="display:none;background:rgba(5,15,35,.95);border:1px solid var(--orange);border-radius:4px;padding:18px 22px;display:none;flex-direction:column;gap:12px;">
+    <div id="createRoomPanel" style="display:none;background:rgba(5,15,35,.95);border:1px solid var(--orange);border-radius:4px;padding:18px 22px;flex-direction:column;gap:12px;">
       <div style="font-family:'Orbitron';font-size:15px;color:var(--orange);letter-spacing:3px;">⚙ CREATE ROOM</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;">
         <div>
@@ -2943,6 +2942,43 @@ function updateNPC(npc,dt){
   }
 
   if(!target){ npc.aiState='patrol'; }
+
+  // ── KOTH: redirect bots to active zone ──────────────────────────
+  if(gameMode==='koth'&&kothZones.length){
+    const activeZone=kothZones[kothHillIdx];
+    if(activeZone){
+      const distToZone=Math.hypot(npc.x-activeZone.x,npc.y-activeZone.y);
+      const inZone=distToZone<activeZone.r;
+      const zoneIsPlayerHeld=activeZone.captured==='player';
+
+      // If bot is not already engaged in combat AND zone is not held by enemies...
+      // move to the zone (either to capture or defend/contest)
+      if(npc.aiState==='patrol'&&!inZone){
+        // Walk straight to zone center
+        const zdx=activeZone.x-npc.x, zdy=activeZone.y-npc.y;
+        const zm=Math.sqrt(zdx*zdx+zdy*zdy)||1;
+        const spd=150;
+        moveWithCollision(npc,(zdx/zm)*spd*dt,(zdy/zm)*spd*dt);
+        npc.angle=Math.atan2(zdy,zdx);
+        return;
+      }
+      // If already inside zone and no combat — stay put, shuffle a bit
+      if(npc.aiState==='patrol'&&inZone){
+        npc.aiTimer-=dt;
+        if(npc.aiTimer<=0){
+          npc.aiTimer=0.8+Math.random()*0.8;
+          // Small shuffle within zone
+          npc.moveNoise={x:(Math.random()-.5),y:(Math.random()-.5)};
+        }
+        moveWithCollision(npc,npc.moveNoise.x*60*dt,npc.moveNoise.y*60*dt);
+        return;
+      }
+      // If zone is player-held and bot is close — increase aggression, always chase
+      if(zoneIsPlayerHeld&&distToZone<activeZone.r*2.5&&npc.aiState==='patrol'&&target){
+        npc.aiState='chase';
+      }
+    }
+  }
 
   if(npc.aiState==='patrol'){
     // If there's any valid target, immediately give chase — no standing around
@@ -6329,6 +6365,22 @@ window.drawMinimap = function(){
   const mctx2 = mmc.getContext('2d');
   const scale = mmc.width / MAP_SIZE;
   drawCratesOnMinimap(mctx2, scale);
+  // Draw KOTH zones on minimap
+  if(gameMode==='koth'&&kothZones&&kothZones.length){
+    kothZones.forEach((zone,i)=>{
+      const isAct=i===kothHillIdx;
+      const col=zone.captured==='player'?'#39ff14':zone.captured==='enemy'?'#f44':'#fa4';
+      const mx=zone.x*scale, my=zone.y*scale, mr=Math.max(4, zone.r*scale);
+      mctx2.beginPath(); mctx2.arc(mx,my,mr,0,Math.PI*2);
+      mctx2.strokeStyle=col; mctx2.lineWidth=isAct?2:1;
+      mctx2.globalAlpha=isAct?0.9:0.45;
+      mctx2.stroke();
+      mctx2.font=`bold ${isAct?9:7}px monospace`;
+      mctx2.fillStyle=col; mctx2.textAlign='center'; mctx2.textBaseline='middle';
+      mctx2.fillText(zone.label,mx,my);
+      mctx2.globalAlpha=1.0;
+    });
+  }
 };
 
 // ─── RESET STREAK COUNT ON DEATH ──────────────────────────────────
@@ -6470,6 +6522,7 @@ function drawStickyBombs() {
 const KOTH_WIN=100;
 let kothZones=[]; // array of {x,y,r,captured:-1/teamIdx/null,captureProgress,label}
 let kothScores={p:0,e:0}; // player-team vs enemy-team (or FFA: p=player only)
+let kothIndivScores={}; // id -> {name,pts} — per-entity KOTH points for leaderboard
 let kothHillIdx=0; // active hill index (rotates every 30s)
 let kothHillTimer=30;
 const KOTH_ROTATE_TIME=30;
@@ -6477,25 +6530,21 @@ const KOTH_ROTATE_TIME=30;
 function initKOTH() {
   kothZones=[];
   kothScores={p:0,e:0};
+  kothIndivScores={};
   kothHillIdx=0;
   kothHillTimer=KOTH_ROTATE_TIME;
   if (gameMode !== 'koth') return;
 
-  // Place 3 hills on the map in safe spots spread apart
-  const candidates=G.spawnPoints||[{x:2500,y:2500}];
-  const placed=[];
-  const minDist=600;
-  let attempts=0;
-  while(placed.length<3&&attempts<200){
-    attempts++;
-    const sp=candidates[Math.floor(Math.random()*candidates.length)];
-    const ok=placed.every(p=>Math.hypot(p.x-sp.x,p.y-sp.y)>minDist);
-    if(ok) placed.push({x:sp.x,y:sp.y});
-  }
-  // Fallback positions if not enough spawn points
-  const fallbacks=[{x:2000,y:2000},{x:3000,y:2000},{x:2500,y:3000}];
-  while(placed.length<3) placed.push(fallbacks[placed.length]);
-  const labels=['ALPHA','BRAVO','CHARLIE'];
+  // Use 3 fixed well-spread positions based on map quadrants, then snap to nearest spawn point
+  const basePositions=[{x:1400,y:1400},{x:3600,y:1400},{x:2500,y:3600}];
+  const candidates=G.spawnPoints||[];
+  const placed=basePositions.map(base=>{
+    if(!candidates.length) return base;
+    let best=null,bestD=Infinity;
+    candidates.forEach(sp=>{const d=Math.hypot(sp.x-base.x,sp.y-base.y);if(d<bestD){bestD=d;best=sp;}});
+    return bestD<800?best:base;
+  });
+  const labels=['A','B','C'];
   placed.forEach((p,i)=>kothZones.push({x:p.x,y:p.y,r:130,captured:null,captureProgress:0,label:labels[i]}));
 
   document.getElementById('hudKOTH').style.display='block';
@@ -6545,33 +6594,88 @@ function updateKOTH(dt) {
     }
   }
 
-  // Score points for captured zone
+  // Score points for captured zone — also track per-entity scores
   const SCORE_RATE=dt*8; // pts/s while holding
-  if(zone.captured==='player') kothScores.p=Math.min(KOTH_WIN,kothScores.p+SCORE_RATE);
-  else if(zone.captured==='enemy') kothScores.e=Math.min(KOTH_WIN,kothScores.e+SCORE_RATE);
+  if(zone.captured==='player'){
+    kothScores.p=Math.min(KOTH_WIN,kothScores.p+SCORE_RATE);
+    // Credit the player individually
+    if(!kothIndivScores['__player']) kothIndivScores['__player']={name:playerName||'YOU',pts:0,isPlayer:true};
+    kothIndivScores['__player'].pts=Math.min(KOTH_WIN,kothIndivScores['__player'].pts+SCORE_RATE);
+  } else if(zone.captured==='enemy'){
+    kothScores.e=Math.min(KOTH_WIN,kothScores.e+SCORE_RATE);
+    // Find which NPC(s) are in the zone and credit them proportionally
+    const holdersInZone=G.npcs.filter(n=>!n.dead&&Math.hypot(n.x-zone.x,n.y-zone.y)<zone.r);
+    if(holdersInZone.length){
+      const share=SCORE_RATE/holdersInZone.length;
+      holdersInZone.forEach(n=>{
+        if(!kothIndivScores[n.name]) kothIndivScores[n.name]={name:n.name,pts:0,isPlayer:false};
+        kothIndivScores[n.name].pts=Math.min(KOTH_WIN,(kothIndivScores[n.name].pts||0)+share);
+      });
+    } else {
+      // Fallback: credit to the 'enemy' bucket for display
+      if(!kothIndivScores['__enemy']) kothIndivScores['__enemy']={name:'ENEMY',pts:0,isPlayer:false};
+      kothIndivScores['__enemy'].pts=Math.min(KOTH_WIN,(kothIndivScores['__enemy'].pts||0)+SCORE_RATE);
+    }
+  }
 
-  // HUD
+  // HUD — show scores + all 3 zone statuses + individual enemy scores
   const pPct=Math.floor(kothScores.p);
   const ePct=Math.floor(kothScores.e);
   const timeLeft=Math.ceil(kothHillTimer);
-  const zoneStatus=zone.captured==='player'?'<span style="color:#39ff14">HELD BY YOU</span>':
-    zone.captured==='enemy'?'<span style="color:#f44">HELD BY ENEMY</span>':
-    contested?'<span style="color:#fa4">CONTESTED</span>':'<span style="color:#888">NEUTRAL</span>';
   const progressPct=((zone.captureProgress+100)/200*100).toFixed(0);
   const hud=document.getElementById('hudKOTH');
+  function _zoneStatusHTML(z,isAct){
+    const cap=z.captured;
+    if(cap==='player') return `<span style="color:#39ff14">▲ YOU</span>`;
+    if(cap==='enemy')  return `<span style="color:#f44">▼ ENEMY</span>`;
+    if(isAct&&contested) return `<span style="color:#fa4">⚠ CONTESTED</span>`;
+    return `<span style="color:#555">— NEUTRAL</span>`;
+  }
+  const zonesHTML=kothZones.map((z,i)=>{
+    const isAct=i===kothHillIdx;
+    const bg=isAct?'rgba(250,180,0,.12)':'rgba(0,0,0,.3)';
+    const border=isAct?'1px solid #fa4':'1px solid #1e3050';
+    const labelCol=z.captured==='player'?'#39ff14':z.captured==='enemy'?'#f44':'#fa4';
+    return `<div style="padding:3px 6px;background:${bg};border:${border};border-radius:2px;display:flex;align-items:center;gap:6px;">
+      <span style="font-family:'Orbitron';font-size:9px;color:${labelCol};min-width:14px;">${z.label[0]}</span>
+      ${isAct?`<span style="font-size:8px;color:#ffe000;">▶</span>`:''}
+      ${_zoneStatusHTML(z,isAct)}
+      ${isAct?`<span style="font-size:8px;color:#888;margin-left:auto;">⏱${timeLeft}s</span>`:''}
+    </div>`;
+  }).join('');
+
+  // Build individual score rows — sort by pts desc, show top 5
+  const indivRows=Object.values(kothIndivScores)
+    .filter(e=>e.pts>0)
+    .sort((a,b)=>b.pts-a.pts)
+    .slice(0,5)
+    .map((e,i)=>{
+      const col=e.isPlayer?'#39ff14':'#f44';
+      const ptsW=Math.min(100,(e.pts/KOTH_WIN)*100).toFixed(0);
+      return `<div style="display:flex;align-items:center;gap:4px;padding:2px 0;">
+        <span style="font-size:8px;color:#555;min-width:10px;">${i+1}</span>
+        <span style="font-size:9px;color:${col};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e.name}</span>
+        <span style="font-size:9px;color:${col};font-family:'Orbitron';min-width:24px;text-align:right;">${Math.floor(e.pts)}</span>
+        <div style="width:36px;height:3px;background:#1a3050;border-radius:1px;flex-shrink:0;">
+          <div style="width:${ptsW}%;height:100%;background:${col};border-radius:1px;"></div>
+        </div>
+      </div>`;
+    }).join('');
+
   if(hud) hud.innerHTML=`
-    <div style="font-family:'Orbitron';font-size:9px;color:#fa4;letter-spacing:2px;margin-bottom:3px;">👑 KING OF THE HILL</div>
-    <div style="font-size:9px;margin-bottom:2px;">ACTIVE: <b style="color:#ffe000">${zone.label}</b> ${zoneStatus} · ⏱ ${timeLeft}s</div>
-    <div style="display:flex;gap:8px;margin-bottom:3px;font-size:10px;">
+    <div style="font-family:'Orbitron';font-size:9px;color:#fa4;letter-spacing:2px;margin-bottom:4px;">👑 KING OF THE HILL</div>
+    <div style="display:flex;gap:8px;margin-bottom:4px;font-size:10px;">
       <span style="color:#39ff14">YOU: ${pPct}</span>
       <span style="color:#888">/</span>
       <span style="color:#f44">ENEMY: ${ePct}</span>
-      <span style="color:#fa4;font-size:8px;">/ ${KOTH_WIN}</span>
+      <span style="color:#fa4;font-size:8px;margin-left:4px;">/ ${KOTH_WIN}</span>
     </div>
-    <div style="width:120px;height:5px;background:#111;border:1px solid #333;position:relative;">
+    <div style="display:flex;flex-direction:column;gap:3px;margin-bottom:4px;">${zonesHTML}</div>
+    <div style="width:100%;height:3px;background:#111;border:1px solid #333;position:relative;margin-bottom:${indivRows?'5px':'0'};">
       <div style="position:absolute;left:0;top:0;bottom:0;width:${progressPct}%;background:${zone.captured==='player'?'#39ff14':zone.captured==='enemy'?'#f44':'#fa4'};transition:width .2s;"></div>
-      <div style="position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:#555;"></div>
-    </div>`;
+      <div style="position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:#555;"></div>
+    </div>
+    ${indivRows?`<div style="border-top:1px solid #1a3050;padding-top:4px;">${indivRows}</div>`:''}`;
 
   if(kothScores.p>=KOTH_WIN) endGame(playerName);
   else if(kothScores.e>=KOTH_WIN) endGame('ENEMIES');
@@ -6584,20 +6688,25 @@ function drawKOTH() {
     const isActive=i===kothHillIdx;
     const pulse=Math.sin(t*(isActive?2.5:1))*0.3+0.7;
     const col=zone.captured==='player'?'57,255,20':zone.captured==='enemy'?'255,50,50':'250,180,0';
-    const alpha=isActive?(0.12*pulse):0.04;
+    const alpha=isActive?(0.12*pulse):0.06;
     // Fill
     ctx.beginPath(); ctx.arc(zone.x,zone.y,zone.r,0,Math.PI*2);
     ctx.fillStyle=`rgba(${col},${alpha})`; ctx.fill();
     // Border
-    ctx.strokeStyle=`rgba(${col},${isActive?0.8*pulse:0.3})`; ctx.lineWidth=isActive?3:1.5;
+    ctx.strokeStyle=`rgba(${col},${isActive?0.8*pulse:0.45})`; ctx.lineWidth=isActive?3:2;
     ctx.setLineDash(isActive?[12,8]:[6,10]); ctx.stroke(); ctx.setLineDash([]);
-    // Label
-    ctx.font=`bold ${isActive?13:10}px 'Orbitron'`; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle=`rgba(${col},${isActive?0.9:0.5})`;
-    ctx.fillText(zone.label,zone.x,zone.y-(isActive?18:12));
+    // Letter badge background circle
+    const bgR=16;
+    ctx.beginPath(); ctx.arc(zone.x,zone.y-(isActive?22:16),bgR,0,Math.PI*2);
+    ctx.fillStyle=`rgba(0,0,0,0.7)`; ctx.fill();
+    ctx.strokeStyle=`rgba(${col},${isActive?0.9:0.6})`; ctx.lineWidth=1.5; ctx.stroke();
+    // Letter label
+    ctx.font=`bold ${isActive?14:11}px 'Orbitron'`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=`rgba(${col},${isActive?1.0:0.75})`;
+    ctx.fillText(zone.label,zone.x,zone.y-(isActive?22:16));
     // Crown icon only on active
     if(isActive){
-      ctx.font='22px serif'; ctx.fillText('👑',zone.x,zone.y+6);
+      ctx.font='20px serif'; ctx.fillText('👑',zone.x,zone.y+8);
       // Capture progress arc
       const prog=(zone.captureProgress+100)/200;
       ctx.strokeStyle=zone.captured==='player'?'#39ff14':zone.captured==='enemy'?'#f44':'#fa4';
@@ -7227,10 +7336,10 @@ setTimeout(()=>{
 </div>
 
 <!-- KOTH HUD -->
-<div id="hudKOTH" style="display:none;position:absolute;top:56px;right:16px;background:rgba(5,12,25,.88);border:1px solid #fa4;padding:6px 14px;text-align:right;font-family:'Share Tech Mono';font-size:11px;letter-spacing:1px;pointer-events:none;"></div>
+<div id="hudKOTH" style="display:none;position:absolute;top:56px;right:16px;background:rgba(5,12,25,.88);border:1px solid #fa4;padding:8px 14px;text-align:left;font-family:'Share Tech Mono';font-size:11px;letter-spacing:1px;pointer-events:none;min-width:180px;"></div>
 
 <!-- DAILY CHALLENGES HUD (menu overlay) -->
-<div id="dailyChallengePanel" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);z-index:800;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
+<div id="dailyChallengePanel" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:900;align-items:center;justify-content:center;flex-direction:column;gap:14px;">
   <div style="font-family:'Orbitron';font-size:22px;color:#fbbf24;letter-spacing:3px;margin-bottom:6px;">📅 DAILY CHALLENGES</div>
   <div id="dailyList" style="display:flex;flex-direction:column;gap:10px;min-width:360px;"></div>
   <button class="btn" onclick="document.getElementById('dailyChallengePanel').style.display='none'">✕ CLOSE</button>
@@ -7418,7 +7527,7 @@ setTimeout(()=>{
     }
     const panel = document.getElementById('dailyChallengePanel');
     if(panel){
-      panel.style.cssText = 'display:flex !important;position:absolute;inset:0;background:rgba(0,0,0,.85);z-index:800;align-items:center;justify-content:center;flex-direction:column;gap:14px;';
+      panel.style.cssText = 'display:flex !important;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:900;align-items:center;justify-content:center;flex-direction:column;gap:14px;';
     }
   };
 })();
@@ -7577,213 +7686,239 @@ setTimeout(()=>{
 })();
 
 // ─── FIX 10: GAMEPAD / CONTROLLER SUPPORT ────────────────────────
-// Full PS4/PS5 and Xbox controller support for both main menu and gameplay
-(function(){
-  // ── Gamepad state ──
-  const PAD = {
-    axes: [0,0,0,0],
-    buttons: new Array(20).fill(false),
-    _prevBtns: new Array(20).fill(false),
-    connected: false,
-    padIndex: -1,
-  };
+// Full PS4/PS5 and Xbox controller support — logic ported from Slimey's Battle Royale
+// =====================================================================
+const gamepad = {
+  connected: false,
+  index: null,
+  aimX: null,
+  aimY: null,
+  aimAngle: 0,
+  aimDist: 140,       // pixels from player centre the crosshair floats
+  _prev: {},
+  _cur: {},
+  _shootHeld: false,
+  _healCd: 0,
+  _pickupCd: 0,
+  _reloadCd: 0,
+  _dropCd: 0,
+  _grenadeCd: 0,
+  _slotCd: 0,
+};
 
-  // Button map (standard gamepad layout — works for Xbox & PS)
-  const BTN = {
-    A:0, B:1, X:2, Y:3,            // face buttons (Xbox) / Cross,Circle,Square,Triangle (PS)
-    LB:4, RB:5, LT:6, RT:7,        // shoulders/triggers
-    BACK:8, START:9,
-    LS:10, RS:11,                   // stick clicks
-    UP:12, DOWN:13, LEFT:14, RIGHT:15, // D-pad
-  };
+const GP_BTN = {
+  A: 0,   B: 1,   X: 2,   Y: 3,
+  LB: 4,  RB: 5,  LT: 6,  RT: 7,
+  SELECT: 8, START: 9,
+  L3: 10, R3: 11,
+  UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15,
+};
 
-  // ── Menu navigation state ──
-  let _menuFocusIdx = 0;
-  let _menuAxisDeadzone = 0.4;
-  let _menuNavCooldown = 0;
-  let _gamepadAimSensitivity = 3.5; // px per frame per axis unit
+function _gpBtn(gp, idx) {
+  const b = gp.buttons[idx];
+  return b ? (typeof b === 'object' ? b.pressed || b.value > 0.5 : b > 0.5) : false;
+}
+function _gpAxis(gp, idx) { return gp.axes[idx] || 0; }
+function _gpDeadzone(val, dz = 0.15) {
+  if (Math.abs(val) < dz) return 0;
+  return (val - Math.sign(val) * dz) / (1 - dz);
+}
 
-  // ── Collect menu buttons for navigation ──
-  function getMenuButtons(){
-    const scr = document.querySelector('.screen.active');
-    if(!scr) return [];
-    return [...scr.querySelectorAll('.menu-btn, .btn, .mdbtn, .streak-card, .cust-item, .crm-pill')].filter(el=>{
-      const r=el.getBoundingClientRect();
-      return r.width>0 && r.height>0;
-    });
-  }
-
-  function focusMenuBtn(idx){
-    const btns = getMenuButtons();
-    if(!btns.length) return;
-    _menuFocusIdx = ((idx % btns.length) + btns.length) % btns.length;
-    btns.forEach((b,i)=>{
-      b.style.outline = i===_menuFocusIdx ? '2px solid #39ff14' : '';
-      b.style.boxShadow = i===_menuFocusIdx ? '0 0 10px rgba(57,255,20,.5)' : '';
-    });
-    btns[_menuFocusIdx].scrollIntoView({block:'nearest'});
-  }
-
-  function clickFocusedBtn(){
-    const btns = getMenuButtons();
-    if(btns[_menuFocusIdx]) btns[_menuFocusIdx].click();
-  }
-
-  // ── Virtual mouse for aim ──
-  let _vMouseX = window.innerWidth/2;
-  let _vMouseY = window.innerHeight/2;
-
-  function patchMouseFromGamepad(rx, ry){
-    _vMouseX = Math.max(0, Math.min(window.innerWidth,  _vMouseX + rx * _gamepadAimSensitivity));
-    _vMouseY = Math.max(0, Math.min(window.innerHeight, _vMouseY + ry * _gamepadAimSensitivity));
-    // Update game mouse position
-    if(G && G.cam && canvas){
-      const zoom = 1 + adsFov*(playerWeapon?.()?.def?.ads||1.5)*0.35;
-      const wx = ((_vMouseX - canvas.width/2) / zoom) + G.cam.x;
-      const wy = ((_vMouseY - canvas.height/2) / zoom) + G.cam.y;
-      mouse.wx = wx; mouse.wy = wy;
-      mouse.sx = _vMouseX; mouse.sy = _vMouseY;
-    }
-  }
-
-  // ── Was-pressed helper (rising edge) ──
-  function btnPressed(idx){ return PAD.buttons[idx] && !PAD._prevBtns[idx]; }
-
-  // ── Main gamepad poll ──
-  function pollGamepad(){
-    let pads = [];
-    try { pads = navigator.getGamepads ? navigator.getGamepads() : []; }
-    catch(e){ return; } // Permissions policy blocks gamepad — stop polling silently
-    let gp = null;
-    for(let i=0; i<pads.length; i++){
-      if(pads[i] && pads[i].connected){ gp = pads[i]; PAD.padIndex = i; break; }
-    }
-    if(!gp){ PAD.connected=false; requestAnimationFrame(pollGamepad); return; }
-    PAD.connected = true;
-
-    // Save prev state
-    PAD._prevBtns = [...PAD.buttons];
-
-    // Read buttons
-    gp.buttons.forEach((b,i)=>{ PAD.buttons[i] = b.pressed || b.value > 0.5; });
-
-    // Read axes (dead-zone applied)
-    const DZ = 0.15;
-    PAD.axes = gp.axes.map(a => Math.abs(a) < DZ ? 0 : a);
-
-    const inGame = document.getElementById('sGame')?.classList.contains('active');
-    const inMenu = !inGame;
-
-    if(inMenu){
-      // ── Menu navigation ──
-      const navDown = PAD.axes[1] > _menuAxisDeadzone || btnPressed(BTN.DOWN);
-      const navUp   = PAD.axes[1] < -_menuAxisDeadzone || btnPressed(BTN.UP);
-      const navRight = PAD.axes[0] > _menuAxisDeadzone || btnPressed(BTN.RIGHT);
-      const navLeft  = PAD.axes[0] < -_menuAxisDeadzone || btnPressed(BTN.LEFT);
-
-      _menuNavCooldown = Math.max(0, _menuNavCooldown - 1);
-      if(_menuNavCooldown === 0){
-        if(navDown || navRight){ _menuNavCooldown=14; focusMenuBtn(_menuFocusIdx+1); }
-        else if(navUp || navLeft){ _menuNavCooldown=14; focusMenuBtn(_menuFocusIdx-1); }
-      }
-      if(btnPressed(BTN.A)) clickFocusedBtn();   // confirm
-      if(btnPressed(BTN.B)){                      // back
-        const backBtn = document.querySelector('.screen.active .btn[onclick*="sMenu"]');
-        if(backBtn) backBtn.click();
-      }
-      if(btnPressed(BTN.START)){
-        // Quick-join from menu
-        const qj = document.getElementById('btnQuickPlay');
-        if(qj) qj.click();
-      }
-    } else {
-      // ── In-game controls ──
-      // Left stick → movement
-      const lx = PAD.axes[0], ly = PAD.axes[1];
-      keys['KeyW'] = ly < -_menuAxisDeadzone;
-      keys['KeyS'] = ly >  _menuAxisDeadzone;
-      keys['KeyA'] = lx < -_menuAxisDeadzone;
-      keys['KeyD'] = lx >  _menuAxisDeadzone;
-
-      // Right stick → aim
-      const rx = PAD.axes[2], ry = PAD.axes[3];
-      if(Math.abs(rx) > 0.1 || Math.abs(ry) > 0.1){
-        patchMouseFromGamepad(rx, ry);
-      }
-
-      // RT / R2 → shoot
-      mouse.down = PAD.buttons[BTN.RT] || PAD.buttons[7];
-
-      // LT / L2 → ADS
-      mouse.right = PAD.buttons[BTN.LT] || PAD.buttons[6];
-
-      // A / Cross → dash
-      if(btnPressed(BTN.A)) keys['Space'] = true; else if(!PAD.buttons[BTN.A]) keys['Space'] = false;
-
-      // B / Circle → slide
-      if(btnPressed(BTN.B)) keys['KeyC'] = true; else if(!PAD.buttons[BTN.B]) keys['KeyC'] = false;
-
-      // X / Square → reload
-      if(btnPressed(BTN.X) && typeof startReload === 'function') startReload();
-
-      // Y / Triangle → weapon slot cycle
-      if(btnPressed(BTN.Y) && G.player){
-        let next = (G.player.slotIdx + 1) % 5;
-        while(!G.player.inv[next] && next !== G.player.slotIdx) next = (next+1)%5;
-        switchWeapon && switchWeapon(next);
-      }
-
-      // LB → streak 1, RB → streak 2
-      if(btnPressed(BTN.LB)) activateStreak && activateStreak(0);
-      if(btnPressed(BTN.RB)) activateStreak && activateStreak(1);
-
-      // START → scoreboard toggle
-      if(btnPressed(BTN.START)){
-        const sb = document.getElementById('hudSB');
-        if(sb) sb.classList.toggle('vis');
-      }
-
-      // BACK / SELECT → emote wheel
-      if(btnPressed(BTN.BACK)){
-        const ew = document.getElementById('emoteWheel');
-        if(ew) ew.style.display = ew.style.display==='flex'?'none':'flex';
-      }
-
-      // D-pad → weapon slot select
-      if(btnPressed(BTN.UP))    switchWeapon && switchWeapon(0);
-      if(btnPressed(BTN.DOWN))  switchWeapon && switchWeapon(1);
-      if(btnPressed(BTN.LEFT))  switchWeapon && switchWeapon(2);
-      if(btnPressed(BTN.RIGHT)) switchWeapon && switchWeapon(3);
-
-      // Sprint: left stick click (LS) or axis magnitude
-      const lMag = Math.hypot(lx, ly);
-      keys['ShiftLeft'] = PAD.buttons[BTN.LS] || lMag > 0.85;
-    }
-
-    requestAnimationFrame(pollGamepad);
-  }
-
-  window.addEventListener('gamepadconnected', e=>{
-    PAD.connected=true; PAD.padIndex=e.gamepad.index;
-    showNotif('🎮 Controller connected: '+e.gamepad.id.slice(0,32));
-    focusMenuBtn(0);
-  });
-  window.addEventListener('gamepaddisconnected', ()=>{
-    PAD.connected=false;
+window.addEventListener('gamepadconnected', e => {
+  gamepad.connected = true;
+  gamepad.index = e.gamepad.index;
+  const id = e.gamepad.id;
+  const label = id.includes('Xbox') ? 'Xbox' : (id.includes('PlayStation')||id.includes('DualSense')||id.includes('DualShock')) ? 'PlayStation' : 'Controller';
+  showNotif('🎮 ' + label + ' connected');
+});
+window.addEventListener('gamepaddisconnected', e => {
+  if (e.gamepad.index === gamepad.index) {
+    gamepad.connected = false;
+    gamepad.index = null;
     showNotif('🎮 Controller disconnected');
-  });
-
-  // Only start the rAF poll if getGamepads is actually accessible
-  try {
-    navigator.getGamepads();
-    requestAnimationFrame(pollGamepad);
-    console.log('[PATCH] Gamepad polling started');
-  } catch(e) {
-    // Permissions policy blocks getGamepads (iframe / certain hosts).
-    // Controller input will still work via the gamepadconnected event
-    // once the user presses a button — no polling needed.
-    console.log('[Gamepad] Polling blocked by permissions policy; event-driven only');
   }
+});
+
+function pollGamepad_SBR(dt) {
+  // dt may not be available when called from rAF — estimate it
+  const _dt = (typeof dt === 'number' && dt > 0 && dt < 0.5) ? dt : 0.016;
+
+  if (!gamepad.connected) return;
+  let gamepads = [];
+  try { gamepads = navigator.getGamepads ? navigator.getGamepads() : []; }
+  catch(e) { return; }
+  const gp = gamepads[gamepad.index];
+  if (!gp) return;
+
+  // Snapshot button states
+  Object.values(GP_BTN).forEach(i => {
+    gamepad._prev[i] = gamepad._cur[i] || false;
+    gamepad._cur[i] = _gpBtn(gp, i);
+  });
+  const pressed = i => gamepad._cur[i] && !gamepad._prev[i]; // rising edge
+
+  // Tick cooldowns
+  gamepad._healCd    = Math.max(0, (gamepad._healCd    || 0) - _dt);
+  gamepad._pickupCd  = Math.max(0, (gamepad._pickupCd  || 0) - _dt);
+  gamepad._reloadCd  = Math.max(0, (gamepad._reloadCd  || 0) - _dt);
+  gamepad._dropCd    = Math.max(0, (gamepad._dropCd    || 0) - _dt);
+  gamepad._grenadeCd = Math.max(0, (gamepad._grenadeCd || 0) - _dt);
+  gamepad._slotCd    = Math.max(0, (gamepad._slotCd    || 0) - _dt);
+
+  const inGame = document.getElementById('sGame')?.classList.contains('active');
+
+  if (!inGame) {
+    // ── Menu navigation (D-pad / left stick) ────────────────────
+    // Re-use existing Slime Wars menu focus logic if available
+    return;
+  }
+
+  // ── LEFT STICK → movement ──────────────────────────────────────
+  const lx = _gpDeadzone(_gpAxis(gp, 0));
+  const ly = _gpDeadzone(_gpAxis(gp, 1));
+  keys['KeyW'] = ly < -0.2;
+  keys['KeyS'] = ly >  0.2;
+  keys['KeyA'] = lx < -0.2;
+  keys['KeyD'] = lx >  0.2;
+  // Sprint: left stick pushed far or L3 click
+  keys['ShiftLeft'] = _gpBtn(gp, GP_BTN.L3) || Math.hypot(lx, ly) > 0.85;
+
+  // ── RIGHT STICK → aim ──────────────────────────────────────────
+  const rx = _gpDeadzone(_gpAxis(gp, 2));
+  const ry = _gpDeadzone(_gpAxis(gp, 3));
+  if (Math.hypot(rx, ry) > 0.12) {
+    gamepad.aimAngle = Math.atan2(ry, rx);
+  }
+  if (G && G.player && G.cam && canvas) {
+    const sx = G.player.x - G.cam.x;
+    const sy = G.player.y - G.cam.y;
+    gamepad.aimX = sx + Math.cos(gamepad.aimAngle) * gamepad.aimDist;
+    gamepad.aimY = sy + Math.sin(gamepad.aimAngle) * gamepad.aimDist;
+    // Map screen position → world position for mouse
+    const zoom = 1 + (adsFov||0) * ((typeof playerWeapon==='function'?playerWeapon():null)?.def?.ads||1.5) * 0.35;
+    const wx = ((gamepad.aimX - canvas.width/2) / zoom) + G.cam.x;
+    const wy = ((gamepad.aimY - canvas.height/2) / zoom) + G.cam.y;
+    mouse.wx = wx; mouse.wy = wy;
+    mouse.sx = gamepad.aimX; mouse.sy = gamepad.aimY;
+  }
+
+  if (!G || !G.player || G.player.dead) return;
+
+  // ── RT → shoot (hold = auto, tap = semi) ───────────────────────
+  const rtHeld = _gpBtn(gp, GP_BTN.RT);
+  if (rtHeld) {
+    mouse.down = true;
+  } else {
+    if (!gamepad._mouseBtnHeld) mouse.down = false;
+    gamepad._shootHeld = false;
+  }
+  if (rtHeld) gamepad._shootHeld = true;
+
+  // ── LT → ADS ───────────────────────────────────────────────────
+  mouse.right = _gpBtn(gp, GP_BTN.LT);
+
+  // ── A / Cross → dash ───────────────────────────────────────────
+  if (pressed(GP_BTN.A)) keys['Space'] = true;
+  else if (!gamepad._cur[GP_BTN.A]) keys['Space'] = false;
+
+  // ── B / Circle → slide ─────────────────────────────────────────
+  if (pressed(GP_BTN.B)) keys['KeyC'] = true;
+  else if (!gamepad._cur[GP_BTN.B]) keys['KeyC'] = false;
+
+  // ── X / Square → reload ────────────────────────────────────────
+  if (pressed(GP_BTN.X) && gamepad._reloadCd <= 0) {
+    if (typeof startReload === 'function') startReload();
+    gamepad._reloadCd = 0.5;
+  }
+
+  // ── Y / Triangle → cycle weapon slot ───────────────────────────
+  if (pressed(GP_BTN.Y) && gamepad._slotCd <= 0 && G.player) {
+    let next = (G.player.slotIdx + 1) % 5;
+    let guard = 0;
+    while (!G.player.inv[next] && next !== G.player.slotIdx && guard++ < 5) next = (next+1)%5;
+    if (typeof switchWeapon === 'function') switchWeapon(next);
+    gamepad._slotCd = 0.18;
+  }
+
+  // ── LB / RB → cycle slots ──────────────────────────────────────
+  if (pressed(GP_BTN.LB) && gamepad._slotCd <= 0) {
+    if (typeof activateStreak === 'function') activateStreak(0);
+    gamepad._slotCd = 0.18;
+  }
+  if (pressed(GP_BTN.RB) && gamepad._slotCd <= 0) {
+    if (typeof activateStreak === 'function') activateStreak(1);
+    gamepad._slotCd = 0.18;
+  }
+
+  // ── D-pad → weapon slot select ─────────────────────────────────
+  if (pressed(GP_BTN.UP))    { if(typeof switchWeapon==='function') switchWeapon(0); }
+  if (pressed(GP_BTN.DOWN))  { if(typeof switchWeapon==='function') switchWeapon(1); }
+  if (pressed(GP_BTN.LEFT))  { if(typeof switchWeapon==='function') switchWeapon(2); }
+  if (pressed(GP_BTN.RIGHT)) { if(typeof switchWeapon==='function') switchWeapon(3); }
+
+  // ── START → scoreboard ─────────────────────────────────────────
+  if (pressed(GP_BTN.START)) {
+    const sb = document.getElementById('hudSB');
+    if (sb) sb.classList.toggle('vis');
+  }
+
+  // ── SELECT → emote wheel ───────────────────────────────────────
+  if (pressed(GP_BTN.SELECT)) {
+    const ew = document.getElementById('emoteWheel');
+    if (ew) ew.style.display = ew.style.display === 'flex' ? 'none' : 'flex';
+  }
+}
+
+// Draw controller crosshair overlay
+function renderGamepadCrosshair() {
+  if (!gamepad.connected || !G || !G.player || G.player.dead) return;
+  const cx = gamepad.aimX != null ? gamepad.aimX : canvas.width / 2;
+  const cy = gamepad.aimY != null ? gamepad.aimY : canvas.height / 2;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2;
+  ctx.shadowBlur = 6;
+  ctx.shadowColor = '#39ff14';
+  const s = 10;
+  ctx.beginPath();
+  ctx.moveTo(cx - s, cy); ctx.lineTo(cx + s, cy);
+  ctx.moveTo(cx, cy - s); ctx.lineTo(cx, cy + s);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(57,255,20,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+// Hook pollGamepad_SBR into the main game loop via rAF
+(function _startGPPolling(){
+  let _lastGPTs = 0;
+  function _gpRaf(ts) {
+    const dt = Math.min((ts - _lastGPTs) / 1000, 0.1);
+    _lastGPTs = ts;
+    pollGamepad_SBR(dt);
+    renderGamepadCrosshair();
+    requestAnimationFrame(_gpRaf);
+  }
+  try {
+    navigator.getGamepads(); // throws in sandboxed iframes
+    requestAnimationFrame(_gpRaf);
+    console.log('[Controller] Polling started');
+  } catch(e) {
+    console.log('[Controller] Polling blocked — event-driven only');
+  }
+})();
+
+// Controller button legend HUD
+(function(){
+  const hud = document.createElement('div');
+  hud.id = 'hudController';
+  hud.style.cssText = 'position:fixed;bottom:4px;right:4px;font-size:9px;color:#2a4060;letter-spacing:1px;pointer-events:none;z-index:9999;';
+  hud.textContent = '🎮';
+  hud.title = 'Controller active';
+  document.body.appendChild(hud);
+  window.addEventListener('gamepadconnected',    () => { hud.style.color = '#39ff14'; });
+  window.addEventListener('gamepaddisconnected', () => { hud.style.color = '#2a4060'; });
 })();
 
 // ─── FIX 11: INFECTION MODE — NPC AI must recognize team contexts  ─
@@ -7809,15 +7944,6 @@ document.querySelectorAll('[onclick*="showDailyChallenges"]').forEach(btn=>{
   btn.onclick = ()=>showDailyChallenges();
 });
 
-// ─── CONTROLLER HUD INDICATOR ─────────────────────────────────────
-(function(){
-  const el = document.createElement('div');
-  el.id = 'hudController';
-  el.style.cssText = 'position:fixed;bottom:4px;right:4px;font-size:9px;color:#2a4060;letter-spacing:1px;pointer-events:none;z-index:9999;';
-  el.textContent = '🎮';
-  el.title = 'Gamepad support active';
-  document.body.appendChild(el);
-})();
 
 console.log('[PATCH BLOCK] All fixes applied successfully.');
 </script>
