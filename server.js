@@ -381,6 +381,11 @@ function handleMessage(ws, msg) {
  
       // TDM: block friendly fire — attacker and target on same team
       if (room.mode === 'tdm' && targetRp.team === player.team) break;
+      // Infection: block same-team hits
+      if (room.mode === 'infection') {
+        const attackerRp = room.players.get(player.socketId);
+        if (attackerRp && targetRp.team === attackerRp.team) break;
+      }
  
       const damage     = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
       const absorbed   = targetRp.armor > 0
