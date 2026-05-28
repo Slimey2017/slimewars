@@ -1041,8 +1041,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
         <div class="hk-row"><span class="hk-key">F / G</span><span class="hk-desc">Scorestreaks</span></div>
         <div class="hk-row"><span class="hk-key">N</span><span class="hk-desc">Nuke (if ready)</span></div>
         <div class="hk-row"><span class="hk-key">H</span><span class="hk-desc">Hide in tree (forest)</span></div>
-        <div class="hk-row"><span class="hk-key">T</span><span class="hk-desc">Chat</span></div>
         <div class="hk-row"><span class="hk-key">TAB</span><span class="hk-desc">Scoreboard</span></div>
+        <div class="hk-row"><span class="hk-key">T</span><span class="hk-desc">Chat</span></div>
+
         <div class="hk-row"><span class="hk-key">ESC</span><span class="hk-desc">Main Menu</span></div>
         <div class="hk-row"><span class="hk-key">?</span><span class="hk-desc">This screen</span></div>
         <div class="hk-row"><span class="hk-key">SCROLL</span><span class="hk-desc">Switch weapon</span></div>
@@ -2831,7 +2832,13 @@ function checkWin(){
 function endGame(winner){
   G.gameOver=true;
   document.getElementById('hudGO').classList.add('vis');
-  document.getElementById('goTitle').textContent=winner==='BLUE TEAM'||winner===playerName?`${winner} WINS! 🏆`:`${winner} WINS`;
+  // Determine whether THIS player is on the winning side so we can add the trophy
+  const _infWinForPlayer = gameMode === 'infection' && (
+    (G.player?.team === 1 && winner === 'INFECTED WIN') ||
+    (G.player?.team === 0 && (winner === 'SURVIVORS WIN' || (typeof winner === 'string' && winner.includes('SURVIVORS WIN'))))
+  );
+  const _playerWon = winner === playerName || winner === 'BLUE TEAM' || _infWinForPlayer;
+  document.getElementById('goTitle').textContent = _playerWon ? `${winner} 🏆` : `${winner}`;
   document.getElementById('goSub').textContent=`${G.player.kills} kills / ${G.player.deaths} deaths`;
   const sorted=Object.entries(G.scores).sort((a,b)=>b[1].k-a[1].k).slice(0,8);
   document.getElementById('goScores').innerHTML=sorted.map((e,i)=>`<div style="display:flex;gap:20px;padding:3px 0;"><span style="color:#3a6a8a;width:24px;">#${i+1}</span><span style="flex:1">${e[0]}</span><span style="color:var(--orange);">${e[1].k}K</span><span style="color:var(--red);">${e[1].d}D</span></div>`).join('');
@@ -2928,7 +2935,17 @@ function updateNPC(npc,dt){
   npc.fireCooldown=Math.max(0,npc.fireCooldown-dt*1000);
   const slot=npc.inv[npc.slotIdx]||npc.inv[0];
   const w=getWeaponDef(slot.weaponId);
-  const {target,dist}=getNearestEnemy(npc);
+  let {target,dist}=getNearestEnemy(npc);
+
+  // ── INFECTION LAST-SURVIVOR HUNT: override target if pinned ──────
+  if(npc._lastSurvivorTarget && !npc._lastSurvivorTarget.dead){
+    target = npc._lastSurvivorTarget;
+    dist   = Math.hypot(target.x - npc.x, target.y - npc.y);
+  } else if(npc._lastSurvivorTarget){
+    // Target died/was infected — clear pin
+    delete npc._lastSurvivorTarget;
+    npc._huntBoost = 1;
+  }
 
   // ─── AI STATE MACHINE ───
   const hpRatio=npc.hp/npc.maxHp;
@@ -3049,7 +3066,7 @@ function updateNPC(npc,dt){
   if(npc.aiState==='chase'){
     const mag=Math.sqrt(dx*dx+dy*dy)||1;
     const optRange=Math.min(w.range*.65,380);
-    const spd=140+npc.skill*40;
+    const spd=(140+npc.skill*40)*(npc._huntBoost||1);
 
     // Strafing logic
     npc.aiTimer-=dt;
@@ -4072,14 +4089,13 @@ function updateHUD(){
     pingEl.style.left=document.getElementById('tgFPS')?.classList.contains('on')?'210px':'170px';
   } else if(pingEl){ pingEl.style.display='none'; }
 
-  // Scoreboard
+  // Scoreboard (TAB)
   if(keys['Tab']){
     document.getElementById('hudSB').classList.add('vis');
     const rows=Object.entries(G.scores).sort((a,b)=>b[1].k-a[1].k);
     document.getElementById('sbRows').innerHTML=`<div class="sb-row" style="font-size:9px;color:#3a6a8a;border-bottom:1px solid var(--border);margin-bottom:4px;"><span style="width:28px"></span><span style="flex:1">NAME</span><span style="width:44px;text-align:right">K</span><span style="width:44px;text-align:right">D</span><span style="width:40px;text-align:right">K/D</span></div>`
       +rows.map((r,i)=>{
         const kd=r[1].d>0?(r[1].k/r[1].d).toFixed(1):'∞';
-        // Resolve display name: could be socketId (online) or NPC name (offline)
         const isMe = r[0]===mySocketId || r[0]===playerName;
         const rp = remotePlayers[r[0]];
         const displayName = isMe ? playerName : (rp?.name || r[1].name || r[0].slice(0,12));
@@ -4174,9 +4190,74 @@ function drawMinimap(){
     mctx.beginPath(); mctx.moveTo(G.player.x*scale,G.player.y*scale);
     mctx.lineTo(G.player.x*scale+Math.cos(G.player.angle)*9,G.player.y*scale+Math.sin(G.player.angle)*9); mctx.stroke();
   }
-  const mmLabel=G.uavActive?'UAV ACTIVE':'MINIMAP';
+
+  // ── INFECTION: permanent last-survivor tracker ──────────────────
+  // Shown to ALL players (survivors and infected) once only one survivor
+  // remains.  Online: position comes from server push (_infLastSurvivorPing).
+  // Solo/NPC: position comes from window._infLastSurvivorTarget entity.
+  if(isInfection() && _infPhase === 'running'){
+    let lsX = null, lsY = null, lsName = null;
+
+    // Online mode — server refreshes this every 50 ms
+    if(currentRoomId && _infLastSurvivorPing){
+      lsX   = _infLastSurvivorPing.x;
+      lsY   = _infLastSurvivorPing.y;
+      lsName = _infLastSurvivorPing.name;
+      // If the local player IS the last survivor, skip drawing (they know where they are)
+      if(_infLastSurvivorPing.socketId === mySocketId){ lsX = null; }
+    }
+
+    // Solo/NPC mode — target entity tracked by updateInfection
+    if(!currentRoomId && window._infLastSurvivorTarget && !window._infLastSurvivorTarget.dead){
+      const tgt = window._infLastSurvivorTarget;
+      lsX   = tgt.x;
+      lsY   = tgt.y;
+      lsName = tgt.isPlayer ? playerName : (tgt.name || 'SURVIVOR');
+      // Don't draw the dot on top of the player's own yellow dot
+      if(tgt.isPlayer && G.player && !G.player.dead){ lsX = null; }
+    }
+
+    if(lsX !== null){
+      const px = lsX * scale, py = lsY * scale;
+      const pulse = (Math.sin(G.gameTime * 6) * 0.5 + 0.5); // 0..1
+
+      // Outer pulsing ring — vivid red, alternating size
+      mctx.save();
+      mctx.beginPath();
+      mctx.arc(px, py, 5 + pulse * 5, 0, Math.PI * 2);
+      mctx.strokeStyle = `rgba(255,30,30,${0.55 + pulse * 0.45})`;
+      mctx.lineWidth = 1.5;
+      mctx.stroke();
+
+      // Second, slightly smaller ring — white, out of phase
+      const pulse2 = (Math.sin(G.gameTime * 6 + Math.PI) * 0.5 + 0.5);
+      mctx.beginPath();
+      mctx.arc(px, py, 3 + pulse2 * 3, 0, Math.PI * 2);
+      mctx.strokeStyle = `rgba(255,255,255,${0.3 + pulse2 * 0.3})`;
+      mctx.lineWidth = 1;
+      mctx.stroke();
+
+      // Solid bright-red centre dot
+      mctx.beginPath();
+      mctx.arc(px, py, 3.5, 0, Math.PI * 2);
+      mctx.fillStyle = '#ff2222';
+      mctx.fill();
+
+      // Small ☠ skull emoji label underneath (only if enough room)
+      if(lsName){
+        mctx.font = 'bold 7px Share Tech Mono';
+        mctx.textAlign = 'center';
+        mctx.fillStyle = 'rgba(255,80,80,0.9)';
+        mctx.fillText('☠ ' + lsName.slice(0, 8).toUpperCase(), px, py + 13);
+        mctx.textAlign = 'left';
+      }
+      mctx.restore();
+    }
+  }
+
+  const mmLabel=G.uavActive?'UAV ACTIVE':(isInfection() && (_infLastSurvivorPing || window._infLastSurvivorTarget) ? '☠ LAST SURVIVOR' : 'MINIMAP');
   document.getElementById('mmLabel').textContent=mmLabel;
-  document.getElementById('mmLabel').style.color=G.uavActive?'#39ff14':'#2a4a6a';
+  document.getElementById('mmLabel').style.color=G.uavActive?'#39ff14':(isInfection() && (_infLastSurvivorPing || window._infLastSurvivorTarget) ? '#ff4444' : '#2a4a6a');
   mctx.strokeStyle='#1e3e2e'; mctx.lineWidth=1; mctx.strokeRect(0,0,MW,MH);
 }
 
@@ -5927,7 +6008,19 @@ window.endGame = function(winner){
 function saveMatchHistory(winner){
   let hist = [];
   try { hist = JSON.parse(localStorage.getItem('slimeWarsHistory')) || []; } catch(e){}
-  const isWin = winner === playerName || (winner==='BLUE TEAM' && G.player?.team===0) || (winner==='RED TEAM' && G.player?.team===1);
+  // Determine win for the local player across all game modes:
+  //   FFA / GunGame  → winner string equals playerName
+  //   TDM            → BLUE TEAM (team 0) or RED TEAM (team 1)
+  //   Infection      → endGame calls 'INFECTED WIN' or 'SURVIVORS WIN'
+  //                    (also accepts "<playerName> & SURVIVORS WIN" variant)
+  const isInfectionWin = gameMode === 'infection' && (
+    (G.player?.team === 1 && winner === 'INFECTED WIN') ||
+    (G.player?.team === 0 && (winner === 'SURVIVORS WIN' || (typeof winner === 'string' && winner.includes('SURVIVORS WIN'))))
+  );
+  const isWin = winner === playerName ||
+    (winner === 'BLUE TEAM' && G.player?.team === 0) ||
+    (winner === 'RED TEAM'  && G.player?.team === 1) ||
+    isInfectionWin;
   const entry = {
     date: new Date().toLocaleDateString(),
     mode: (gameMode||'ffa').toUpperCase(),
@@ -6846,23 +6939,10 @@ function announceKillStreak(count){
   }
 }
 
-// ─── POST-MATCH STATS ────────────────────────────────────────────
-let _mStats={dmg:0,shots:0,hits:0,wKills:{},peakStreak:0};
-function resetMatchStats(){_mStats={dmg:0,shots:0,hits:0,wKills:{},peakStreak:0};}
-function recordShot(wname){_mStats.shots++;_mStats.wKills[wname]=(_mStats.wKills[wname]||0);}
-function recordHitDmg(dmg,wname){_mStats.hits++;_mStats.dmg+=dmg;if(wname)_mStats.wKills[wname]=(_mStats.wKills[wname]||0)+1;}
-function showPostMatchCard(){
-  const acc=_mStats.shots>0?((_mStats.hits/_mStats.shots)*100).toFixed(1):'0.0';
-  const best=Object.entries(_mStats.wKills).sort((a,b)=>b[1]-a[1])[0]?.[0]||'PISTOL';
-  const el=document.getElementById('postMatchCard');
-  if(!el)return;
-  document.getElementById('postMatchContent').innerHTML=`
-    <div>🎯 Accuracy: <strong style="color:#39ff14">${acc}%</strong></div>
-    <div>💢 Damage Dealt: <strong style="color:#f97316">${_mStats.dmg}</strong></div>
-    <div>🏆 Best Weapon: <strong style="color:#fbbf24">${best}</strong></div>
-    <div>🔥 Peak Streak: <strong style="color:#f44">${_mStats.peakStreak}</strong></div>`;
-  el.style.display='block';
-}
+// ─── POST-MATCH STATS removed ────────────────────────────────────
+function resetMatchStats(){}
+function recordShot(){}
+function recordHitDmg(){}
 
 // ─── SPECTATOR MODE ──────────────────────────────────────────────
 let _spectMode=false, _spectTarget=null;
@@ -7045,16 +7125,22 @@ let _grenadeForceThrow=false, _grenadeCookRatio=0;
 // infect survivors (team 0). Survivors win if any survive until time runs out.
 // Infected win by converting all survivors.
 let _infTimer=0;
-const _INF_TIME=90;
+const _INF_TIME=180;
 let _infTimeLeft=_INF_TIME;
 let _infPhase='running';
 // Track which NPCs are permanently dead (not just waiting to respawn) in infection
 // In infection: killed survivors are DEAD DEAD (eliminated). Infected cannot die permanently — they respawn.
+// Tracks whether the last-survivor warning has already fired this round.
+let _infLastSurvivorWarned=false;
+// Online mode: server pushes infection_last_survivor with live coords each tick.
+// Stored here so drawMinimap can read it without coupling to updateInfection.
+// { socketId, name, x, y }  — null when no last-survivor yet.
+let _infLastSurvivorPing = null;
 
 function isInfection(){return gameMode==='infection';}
 
 function initInfectionMode(){
-  _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running';
+  _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
   if(!isInfection()||!G.npcs.length)return;
 
   G.player.team=0;
@@ -7063,8 +7149,8 @@ function initInfectionMode(){
   // 1 NPC starts infected — pick one far from player
   const sorted=[...G.npcs].sort((a,b)=>Math.hypot(b.x-G.player.x,b.y-G.player.y)-Math.hypot(a.x-G.player.x,a.y-G.player.y));
   _setInfected(sorted[0]);
-  showNotif('🦠 INFECTION! Survive 90 seconds!',3000);
-  addGChat('SERVER','🦠 Survivors: last 90s to win! Infected: eliminate all survivors!');
+  showNotif('🦠 INFECTION! Survive 3 minutes!',3000);
+  addGChat('SERVER','🦠 Survivors: last 3 minutes to win! Infected: eliminate all survivors!');
   document.getElementById('hudKOTH').style.display='block';
 }
 
@@ -7192,7 +7278,6 @@ window.killEntity=function(killer,victim){
   __origKillEntity(killer,victim);
   checkInfectOnKill(killer,victim);
   if(killer.isPlayer){
-    _mStats.peakStreak=Math.max(_mStats.peakStreak,_killStreakCount||0);
     announceKillStreak(G.player.kills);
     _addXP(50);
     updateDailyChallenge('games_played',0); // not here, but track weapon-specific
@@ -7215,13 +7300,12 @@ window.dealDamage=function(attacker,victim,dmg){
   __origDealDamage(attacker,victim,dmg);
 };
 
-// Patch endGame to show post-match stats
+// Patch endGame to award XP and update challenges
 const __origEndGame=endGame;
 window.endGame=function(winner){
   __origEndGame(winner);
   _addXP(200);
   updateDailyChallenge('games_played');
-  setTimeout(showPostMatchCard, 800);
   resetMatchStats();
 };
 
@@ -7233,7 +7317,11 @@ window.updatePlayer=function(dt){
   updateHeartbeat();
   updateGrenadeCook(dt);
   updateKOTH(dt);
-  updateInfection(dt);
+  // NOTE: updateInfection(dt) is intentionally NOT called here.
+  // FIX 2 replaced window.updateInfection with its own version; calling it
+  // twice per frame would double-tick _infTimeLeft (Bug 4).  The call that
+  // already exists inside the original updatePlayer body (defined above in
+  // the main game code) is the single authoritative tick.
   updateLavaZones(dt);
   updateStickyBombs(dt);
   checkBarrelsForBullets();
@@ -7345,12 +7433,7 @@ setTimeout(()=>{
   <button class="btn" onclick="document.getElementById('dailyChallengePanel').style.display='none'">✕ CLOSE</button>
 </div>
 
-<!-- POST MATCH STATS CARD -->
-<div id="postMatchCard" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(5,12,25,.98);border:1px solid #fbbf24;padding:28px 40px;z-index:150;text-align:center;min-width:320px;">
-  <div style="font-family:'Orbitron';font-size:16px;color:#fbbf24;letter-spacing:3px;margin-bottom:14px;">📊 MATCH STATS</div>
-  <div id="postMatchContent" style="font-size:12px;line-height:2;color:#ccc;"></div>
-  <button class="btn" onclick="document.getElementById('postMatchCard').style.display='none'" style="margin-top:14px;">CLOSE</button>
-</div>
+<!-- POST MATCH STATS CARD removed -->
 
 <!-- LOW HP OVERLAY -->
 <style>
@@ -7414,6 +7497,60 @@ setTimeout(()=>{
     const infectedNPCs = G.npcs.filter(n=>!n.dead && n.team===1);
     const totalInfected = infectedNPCs.length + (playerAlive && G.player.team===1 ? 1 : 0);
 
+    // ── LAST-SURVIVOR LOGIC ──────────────────────────────────────
+    // Identify the single remaining survivor (player or NPC).
+    const lastSurvivorNPC  = survivorNPCs.length === 1 && !playerSurvivor ? survivorNPCs[0] : null;
+    const lastSurvivorIsPlayer = playerSurvivor && survivorNPCs.length === 0;
+    const isLastSurvivor = totalSurvivors === 1;
+
+    // Fire the "last survivor" warning once per round.
+    if(isLastSurvivor && !_infLastSurvivorWarned){
+      _infLastSurvivorWarned = true;
+      if(lastSurvivorIsPlayer){
+        // Tell the player they're the last one standing and brag to the room.
+        showNotif('🏃 YOU ARE THE LAST SURVIVOR! EVERYONE IS HUNTING YOU!', 4500);
+        addGChat('SERVER', `☠ ${playerName} is the LAST SURVIVOR — ALL INFECTED CONVERGE!`);
+        // Red vignette pulse to sell the panic.
+        const v = document.getElementById('hudVignette');
+        if(v){
+          v.style.background='radial-gradient(ellipse at center,transparent 20%,rgba(255,0,0,.7) 100%)';
+          setTimeout(()=>v.style.background='', 1800);
+        }
+      } else if(lastSurvivorNPC){
+        // Tell the player (infected or observer) who the last NPC survivor is.
+        const lsName = lastSurvivorNPC.name || 'SURVIVOR';
+        showNotif(`☠ LAST SURVIVOR: ${lsName.toUpperCase()} — HUNT THEM DOWN!`, 4500);
+        addGChat('SERVER', `☠ ${lsName} is the LAST SURVIVOR — ALL INFECTED CONVERGE!`);
+      }
+    }
+
+    // ── INFECTED AI: TRACK LAST SURVIVOR ────────────────────────
+    // When only one survivor remains, override all infected NPCs' targets
+    // so they beeline directly at the last survivor's position.
+    if(isLastSurvivor){
+      const targetEntity = lastSurvivorIsPlayer ? G.player : lastSurvivorNPC;
+      if(targetEntity){
+        infectedNPCs.forEach(inf=>{
+          // Force the NPC into chase mode and pin its target directly.
+          inf.aiState = 'chase';
+          inf._lastSurvivorTarget = targetEntity;
+          // Boost speed slightly to ratchet up the pressure.
+          inf._huntBoost = 1.28;
+        });
+        // If the player is infected, draw an arrow/ping on-screen pointing at the target.
+        if(playerAlive && G.player.team === 1 && targetEntity !== G.player){
+          window._infLastSurvivorTarget = targetEntity; // consumed by HUD below
+        } else {
+          window._infLastSurvivorTarget = null;
+        }
+      }
+    } else {
+      // More than one survivor — clear the hunt boost and the target pin.
+      infectedNPCs.forEach(inf=>{ inf._huntBoost = 1; delete inf._lastSurvivorTarget; });
+      window._infLastSurvivorTarget = null;
+      if(!isLastSurvivor) _infLastSurvivorWarned = false; // reset if a new round somehow starts mid-game
+    }
+
     // NPC-to-NPC contact infection only (player NOT infected by touch)
     infectedNPCs.forEach(inf=>{
       survivorNPCs.forEach(sur=>{
@@ -7428,8 +7565,42 @@ setTimeout(()=>{
     if(totalSurvivors === 0){ _infPhase='over'; endGame('INFECTED WIN'); return; }
     if(_infTimeLeft <= 0){ _infPhase='over'; endGame(playerSurvivor ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
 
+    // ── HUD ───────────────────────────────────────────────────────
     const tStr = Math.ceil(_infTimeLeft)+'s';
-    const urgency = _infTimeLeft<20?'color:#f44':_infTimeLeft<40?'color:#fa4':'color:#4f4';
+    // Urgency thresholds scaled to 180 s: red <30 s, amber <60 s, green otherwise.
+    const urgency = _infTimeLeft<30?'color:#f44':_infTimeLeft<60?'color:#fa4':'color:#4f4';
+
+    // Last-survivor arrow for infected player: show direction + distance.
+    let lastSurvivorPin = '';
+    if(window._infLastSurvivorTarget && playerAlive && G.player.team===1){
+      const tgt = window._infLastSurvivorTarget;
+      const dx = tgt.x - G.player.x, dy = tgt.y - G.player.y;
+      const dist = Math.round(Math.hypot(dx,dy));
+      const angleDeg = Math.round(Math.atan2(dy,dx) * 180/Math.PI);
+      // Unicode arrow: rotate into 8 compass directions.
+      const arrows = ['→','↘','↓','↙','←','↖','↑','↗'];
+      const arrowIdx = Math.round(((angleDeg + 360) % 360) / 45) % 8;
+      lastSurvivorPin = `
+        <div style="margin-top:5px;padding:4px 6px;background:rgba(255,60,0,.18);border:1px solid #f44;border-radius:2px;font-size:10px;color:#f88;letter-spacing:1px;">
+          ☠ LAST SURVIVOR ${arrows[arrowIdx]} ${dist}u
+        </div>`;
+    }
+
+    // Last-survivor highlight row for survivors: panic if the player is last.
+    let lastSurvivorRow = '';
+    if(lastSurvivorIsPlayer){
+      const pulse = Math.sin(Date.now()/280)>.0?'color:#f44':'color:#fa4';
+      lastSurvivorRow = `
+        <div style="margin-top:5px;padding:3px 6px;background:rgba(255,0,0,.2);border:1px solid #f44;border-radius:2px;font-size:10px;font-weight:bold;${pulse}letter-spacing:1px;animation:none;">
+          ⚠ LAST SURVIVOR — EVADE!
+        </div>`;
+    } else if(isLastSurvivor && lastSurvivorNPC){
+      lastSurvivorRow = `
+        <div style="margin-top:5px;font-size:10px;color:#f84;letter-spacing:1px;">
+          ☠ LAST: ${(lastSurvivorNPC.name||'???').slice(0,10)}
+        </div>`;
+    }
+
     const hud = document.getElementById('hudKOTH');
     if(hud) hud.innerHTML=`
       <div style="font-family:'Orbitron';font-size:9px;color:#39ff14;letter-spacing:2px;margin-bottom:3px;">🦠 INFECTION</div>
@@ -7440,7 +7611,7 @@ setTimeout(()=>{
       </div>
       <div style="font-size:10px;font-weight:bold;color:${G.player.team===0?'#39ff14':'#f44'}">
         ${G.player.team===0?'🟢 YOU: SURVIVOR':'🦠 YOU: INFECTED'}
-      </div>`;
+      </div>${lastSurvivorRow}${lastSurvivorPin}`;
   };
 
   // Patch checkInfectOnKill: bullet-infection still works, but now ONLY the
@@ -7470,13 +7641,21 @@ setTimeout(()=>{
 // ─── FIX 3: RESPAWN TIMER — game pauses during respawn screen ───
 // Root cause: G.lastTime isn't reset after respawn screen closes, so when
 // the player respawns a huge dt spike is processed, warping time.
+// BUG-3 NOTE: In infection mode the original gameLoop handles player.dead by
+// calling _infectPlayer() (survivor → infected).  FIX 3 must NOT intercept
+// that path — only intercept when a real respawn screen is showing AND
+// the mode is not infection (or the player is already infected).
 (function(){
   const _origGameLoop = window.gameLoop || gameLoop;
   window.gameLoop = gameLoop = function(ts){
-    // If respawn screen is visible, keep updating lastTime but freeze the world
+    // Only freeze the world for the respawn screen in non-infection modes.
+    // In infection mode the dead-player path is handled by the original loop
+    // (_infectPlayer call for survivor team, or normal respawn for infected).
     const respawnEl = document.getElementById('hudRespawn');
     const isDead = G.player && G.player.dead;
-    if(isDead && respawnEl && respawnEl.classList.contains('vis')){
+    const isInfectionSurvivorDeath = isDead && isInfection() &&
+          G.player.team === 0 && _infPhase === 'running';
+    if(isDead && respawnEl && respawnEl.classList.contains('vis') && !isInfectionSurvivorDeath){
       // Tick respawn countdown but freeze dt for physics
       if(G._lastRespawnTs === undefined) G._lastRespawnTs = ts;
       const rdt = Math.min((ts - G._lastRespawnTs)/1000, 0.1);
@@ -7946,6 +8125,225 @@ document.querySelectorAll('[onclick*="showDailyChallenges"]').forEach(btn=>{
 
 
 console.log('[PATCH BLOCK] All fixes applied successfully.');
+
+// ═══════════════════════════════════════════════════════════════════
+// INFECTION FIX PACK — 4 targeted fixes
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── FIX A: FRIENDLY FIRE — teammates can no longer hit you ─────────
+// Root cause: dealDamage has no team-check. We add one that works for
+// both TDM and Infection mode.
+(function(){
+  const _origDD = window.dealDamage;
+  window.dealDamage = function(attacker, victim, dmg){
+    if(!attacker || !victim) return _origDD(attacker, victim, dmg);
+    // TDM: same team = no damage
+    if((gameMode === 'tdm' || (G && G.mode === 'tdm')) && attacker.team !== undefined && victim.team !== undefined && attacker.team === victim.team) return;
+    // Infection: same team = no damage (infected don't hurt infected, survivors don't hurt survivors)
+    if((gameMode === 'infection' || (G && G.mode === 'infection')) && attacker.team !== undefined && victim.team !== undefined && attacker.team === victim.team) return;
+    _origDD(attacker, victim, dmg);
+  };
+})();
+
+// ─── FIX B: INFECTION INIT RACE — exactly ONE NPC starts infected ───
+// Root cause: initInfectionMode() is called in a setTimeout(100ms) but
+// multiple startGameFromLobby patches each schedule their OWN setTimeout,
+// causing double/triple inits or races where G.npcs hasn't populated yet.
+// Solution: use a reliable post-game-start hook that fires once per game.
+(function(){
+  // Intercept the last startGameFromLobby patch in the chain
+  const _prev = window.startGameFromLobby;
+  window.startGameFromLobby = function(){
+    _prev.apply(this, arguments);
+    // Cancel any pending infection inits from earlier patches
+    if(window._infInitTimer) clearTimeout(window._infInitTimer);
+    // Schedule one authoritative init — 200ms so all NPCs are placed
+    window._infInitTimer = setTimeout(function(){
+      if(gameMode !== 'infection') return;
+      if(!G || !G.npcs || !G.npcs.length) return;
+      // Reset all teams
+      G.player.team = (_soloInfectionRole === 'infected') ? 1 : 0;
+      G.npcs.forEach(n=>{ n.team=0; n._infected=false; n.dead=false; n.hp=n.maxHp; });
+      _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
+
+      if(_soloInfectionRole === 'infected'){
+        // Player is the ONLY infected — no NPC teammate
+        G.player.team = 1;
+        // All NPCs stay team 0 (survivors) — player hunts them alone
+        showNotif('🦠 YOU ARE INFECTED! Hunt all survivors!',3000);
+        addGChat('SERVER','🦠 You are the first infected — infect all survivors to win!');
+        const v=document.getElementById('hudVignette');
+        if(v){ v.style.background='radial-gradient(ellipse at center,transparent 30%,rgba(0,200,0,.85) 100%)'; setTimeout(()=>v.style.background='',1500); }
+      } else {
+        // Player is survivor — 1 NPC starts infected (farthest away)
+        const sorted=[...G.npcs].sort((a,b)=>Math.hypot(b.x-G.player.x,b.y-G.player.y)-Math.hypot(a.x-G.player.x,a.y-G.player.y));
+        _setInfected(sorted[0]);
+        showNotif('🦠 INFECTION! Survive 3 minutes!',3000);
+        addGChat('SERVER','🦠 Survivors: last 3 minutes to win! Infected: eliminate all survivors!');
+      }
+      document.getElementById('hudKOTH').style.display='block';
+      window._infInitTimer = null;
+    }, 200);
+  };
+})();
+
+// ─── FIX C: MATCH STATS — scores now always carry player name ────────
+// Root cause: NPC score entries created as {k,d,score} without .name, so
+// the MVP card and post-match display showed undefined names.
+// Also: infection mode win condition now shows correct survivor/infected counts.
+(function(){
+  // Ensure every score entry always has a .name
+  const _origStartGame = window.startGameFromLobby;
+  // Patch G.scores assignment to always include name
+  // Hook into the NPC spawn section by patching getOrInitScore equivalent
+  // We wrap endGame to fix scores before display
+  const _origEndGame = window.endGame || endGame;
+  window.endGame = endGame = function(winnerName, scores){
+    // Repair any score entries missing .name
+    if(G && G.scores){
+      Object.entries(G.scores).forEach(([k,v])=>{
+        if(!v.name){
+          // Try to find NPC with matching name key
+          const npc = G.npcs && G.npcs.find(n=>n.name===k);
+          v.name = npc ? npc.name : k.slice(0,12);
+        }
+      });
+    }
+    _origEndGame(winnerName, scores);
+  };
+
+  // Also patch the NPC score init in startGameFromLobby output:
+  // G.scores[npc.name]={k:0,d:0,score:0} → always add name
+  const _origSGFL3 = window.startGameFromLobby;
+  window.startGameFromLobby = function(){
+    _origSGFL3.apply(this, arguments);
+    // After game starts, add .name to all score entries
+    setTimeout(()=>{
+      if(!G || !G.scores) return;
+      if(G.npcs) G.npcs.forEach(n=>{ if(G.scores[n.name] && !G.scores[n.name].name) G.scores[n.name].name = n.name; });
+      const myKey = currentRoomId ? mySocketId : playerName;
+      if(G.scores[myKey]) G.scores[myKey].name = playerName;
+    }, 300);
+  };
+
+  // Patch showMVPCard to handle infection mode with survivor/infected stat
+  // postMatchCard removed — no extra infection results overlay needed
+})();
+
+// ─── FIX D: SOLO PRACTICE INFECTION ROLE PICKER ──────────────────────
+// Adds a "YOUR ROLE" selector in the solo practice modal for Infection mode.
+// _soloInfectionRole = 'survivor' | 'infected'
+// NOTE: declared once here; FIX B reads it during startGameFromLobby.
+// Do NOT re-declare with `let` inside any patch block — that would reset it.
+if (typeof _soloInfectionRole === 'undefined') { var _soloInfectionRole = 'survivor'; }
+
+(function(){
+  // Inject role row into the solo modal whenever it's built
+  const _origStartSoloPractice = window.startSoloPractice;
+  window.startSoloPractice = function(){
+    _origStartSoloPractice.apply(this, arguments);
+    // After modal is created, inject the role row
+    setTimeout(()=>{
+      const modal = document.getElementById('soloModal');
+      if(!modal) return;
+      // Find the mode buttons container
+      const modeBtns = modal.querySelector('#soloModeBtns');
+      if(!modeBtns) return;
+      // Don't add twice
+      if(modal.querySelector('#soloRoleRow')) return;
+
+      const roleRow = document.createElement('div');
+      roleRow.id = 'soloRoleRow';
+      roleRow.style.display = 'none'; // hidden until infection is selected
+      roleRow.innerHTML = `
+        <div style="font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;margin-top:8px;">🦠 INFECTION ROLE</div>
+        <div style="display:flex;gap:8px;">
+          <button class="crm-pill on" id="roleBtn_survivor" onclick="setSoloRole('survivor')" style="border-color:#39ff14;color:#39ff14;">🟢 SURVIVOR</button>
+          <button class="crm-pill" id="roleBtn_infected" onclick="setSoloRole('infected')" style="border-color:#f44;color:#f44;">🦠 INFECTED</button>
+        </div>
+        <div style="font-size:10px;color:#4a7a9a;margin-top:5px;" id="soloRoleDesc">🟢 SURVIVOR — Last as long as you can. Avoid the infected!</div>`;
+
+      // Insert after the mode buttons parent div
+      const modeParent = modeBtns.parentElement;
+      modeParent.parentNode.insertBefore(roleRow, modeParent.nextSibling);
+
+      // Update visibility based on current mode
+      refreshSoloRoleRow();
+    }, 50);
+  };
+
+  // Hook setSoloPick to show/hide role row
+  const _origSSP = window.setSoloPick;
+  window.setSoloPick = function(key, val, btn){
+    _origSSP(key, val, btn);
+    if(key === 'mode') refreshSoloRoleRow();
+  };
+})();
+
+function refreshSoloRoleRow(){
+  const row = document.getElementById('soloRoleRow');
+  if(!row) return;
+  row.style.display = (_soloSettings.mode === 'infection') ? 'block' : 'none';
+}
+
+function setSoloRole(role){
+  _soloInfectionRole = role;
+  const s = document.getElementById('roleBtn_survivor');
+  const i = document.getElementById('roleBtn_infected');
+  const d = document.getElementById('soloRoleDesc');
+  if(s){ s.classList.toggle('on', role==='survivor'); s.style.opacity = role==='survivor'?'1':'0.5'; }
+  if(i){ i.classList.toggle('on', role==='infected'); i.style.opacity = role==='infected'?'1':'0.5'; }
+  if(d) d.textContent = role==='survivor' ? '🟢 SURVIVOR — Last as long as you can. Avoid the infected!' : '🦠 INFECTED — Hunt and infect all survivors before time runs out!';
+}
+
+// Reset role to survivor each new game unless explicitly chosen
+const _finalSGFL = window.startGameFromLobby;
+window.startGameFromLobby = function(){
+  if(gameMode !== 'infection') _soloInfectionRole = 'survivor'; // only matters for infection
+  _finalSGFL.apply(this, arguments);
+};
+
+// ─── FIX E: ONLINE INFECTION TEAM SYNC ──────────────────────────────
+// When a player gets infected in online mode, tell the server so
+// the hit_player team-check stays accurate for all clients.
+(function(){
+  const _origInfectPlayer = window._infectPlayer || _infectPlayer;
+  window._infectPlayer = _infectPlayer = function(){
+    _origInfectPlayer();
+    if(currentRoomId && typeof wsSend === 'function'){
+      wsSend({ type:'infection_team', team: G.player ? G.player.team : 1 });
+    }
+  };
+
+  // Handle incoming infection_team + infection_last_survivor from server
+  const _origHSM2 = window.handleServerMsg;
+  window.handleServerMsg = function(msg){
+    if(msg.type === 'infection_team'){
+      const rp = remotePlayers[msg.socketId];
+      if(rp) rp.infTeam = msg.team;
+      return;
+    }
+    // ── Server pushes the last survivor's live position every tick ──
+    if(msg.type === 'infection_last_survivor'){
+      if(msg.socketId){
+        _infLastSurvivorPing = { socketId: msg.socketId, name: msg.name, x: msg.x, y: msg.y };
+      } else {
+        _infLastSurvivorPing = null; // cleared — more than one survivor again
+      }
+      return;
+    }
+    _origHSM2(msg);
+  };
+
+  // Reset the ping on every new game so stale data never shows
+  const _prevSGFL_E = window.startGameFromLobby;
+  window.startGameFromLobby = function(){
+    _infLastSurvivorPing = null;
+    _prevSGFL_E.apply(this, arguments);
+  };
+})();
+
+console.log('[INFECTION FIX PACK] A+B+C+D+E applied.');
 </script>
 </body>
 </html>
