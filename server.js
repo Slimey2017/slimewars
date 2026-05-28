@@ -381,10 +381,13 @@ function handleMessage(ws, msg) {
  
       // TDM: block friendly fire — attacker and target on same team
       if (room.mode === 'tdm' && targetRp.team === player.team) break;
-      // Infection: block same-team hits
+      // Infection: block same-team hits (survivor vs survivor, infected vs infected)
       if (room.mode === 'infection') {
         const attackerRp = room.players.get(player.socketId);
-        if (attackerRp && targetRp.team === attackerRp.team) break;
+        // infTeam tracks the runtime infection team (0=survivor,1=infected)
+        const attackerTeam = attackerRp ? (attackerRp.infTeam !== undefined ? attackerRp.infTeam : attackerRp.team) : player.team;
+        const victimTeam   = targetRp.infTeam !== undefined ? targetRp.infTeam : targetRp.team;
+        if (attackerTeam === victimTeam) break;
       }
  
       const damage     = Math.min(Math.max(Number(msg.damage) || 0, 0), 500);
@@ -447,7 +450,10 @@ function handleMessage(ws, msg) {
           weapon    : msg.weapon || '?',
           scores    : room.scores,
         });
- 
+
+        // In infection mode, re-evaluate last-survivor tracking after each kill
+        if (room.mode === 'infection') checkInfectionLastSurvivor(room);
+
         checkWin(room);
       }
       break;
@@ -741,6 +747,25 @@ function handleMessage(ws, msg) {
       break;
     }
 
+    // ── Infection team sync — client tells server when player becomes infected ──
+    // Client sends: { type:'infection_team', team:0|1 }
+    case 'infection_team': {
+      const room = getPlayerRoom(player);
+      if (!room || room.state !== 'ingame' || room.mode !== 'infection') break;
+      const rp = room.players.get(player.socketId);
+      if (rp) rp.infTeam = msg.team === 1 ? 1 : 0;
+      player.infTeam = msg.team === 1 ? 1 : 0;
+      // Broadcast so all clients see the team change
+      broadcast(room, {
+        type    : 'infection_team',
+        socketId: player.socketId,
+        team    : rp ? rp.infTeam : 0,
+      });
+      // Re-evaluate last-survivor tracking after every team change
+      checkInfectionLastSurvivor(room);
+      break;
+    }
+
     // ── KOTH control point update ─────────────────────────────────
     case 'koth_points': {
       const room = getPlayerRoom(player);
@@ -756,7 +781,34 @@ function handleMessage(ws, msg) {
   }
 }
  
-// ─── Join / Leave ──────────────────────────────────────────────────
+// ─── Infection: last-survivor tracker ─────────────────────────────
+// Called whenever a player's infTeam changes or a kill is confirmed.
+// If exactly one survivor (infTeam===0, not dead) remains, broadcasts
+// infection_last_survivor to all room players so clients can track them
+// on the minimap permanently.  If nobody or multiple survivors remain,
+// broadcasts infection_last_survivor with socketId:null to clear it.
+function checkInfectionLastSurvivor(room) {
+  if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  const survivors = [];
+  room.players.forEach((rp, sid) => {
+    const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+    if (!rp.dead && team === 0) survivors.push({ sid, rp });
+  });
+  if (survivors.length === 1) {
+    const { sid, rp } = survivors[0];
+    broadcast(room, {
+      type      : 'infection_last_survivor',
+      socketId  : sid,
+      name      : rp.name,
+      x         : rp.x,
+      y         : rp.y,
+    });
+  } else {
+    // 0 survivors (game over handled elsewhere) or >1 — clear the tracker
+    broadcast(room, { type: 'infection_last_survivor', socketId: null });
+  }
+}
+
 function joinRoom(ws, roomId, info = {}) {
   const player = players.get(ws);
   if (!player) return;
@@ -1003,6 +1055,26 @@ setInterval(() => {
       kills: p.kills,
     }));
     broadcast(room, { type: 'world_snapshot', players: snapshot, scores: room.scores });
+
+    // In infection mode, refresh the last-survivor pin every tick so the
+    // minimap dot tracks their live position without a separate message type.
+    if (room.mode === 'infection') {
+      const survivors = [];
+      room.players.forEach((rp, sid) => {
+        const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+        if (!rp.dead && team === 0) survivors.push({ sid, rp });
+      });
+      if (survivors.length === 1) {
+        const { sid, rp } = survivors[0];
+        broadcast(room, {
+          type    : 'infection_last_survivor',
+          socketId: sid,
+          name    : rp.name,
+          x       : rp.x,
+          y       : rp.y,
+        });
+      }
+    }
   });
 }, TICK_MS);
  
