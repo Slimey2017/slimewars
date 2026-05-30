@@ -696,7 +696,7 @@ function handleMessage(ws, msg) {
       if (!room || room.state !== 'ingame') break;
       const rp = room.players.get(player.socketId);
       if (rp) {
-        rp.dead = false; rp.hp = 100; rp.armor = 0; rp.piercingTimer = 0;
+        rp.dead = false; rp.hp = 100; rp.armor = 0;
         if (msg.x !== undefined) rp.x = msg.x;
         if (msg.y !== undefined) rp.y = msg.y;
         // In infection mode, reviving a survivor restores their survivor team
@@ -743,9 +743,7 @@ function handleMessage(ws, msg) {
     case 'piercing_pickup': {
       const room = getPlayerRoom(player);
       if (!room || room.state !== 'ingame') break;
-      const rp = room.players.get(player.socketId);
-      if (rp) rp.piercingTimer = 30;
-      broadcast(room, { type: 'piercing_pickup', socketId: player.socketId, duration: 30 }, ws);
+      broadcast(room, { type: 'piercing_pickup', socketId: player.socketId }, ws);
       break;
     }
  
@@ -860,7 +858,6 @@ function joinRoom(ws, roomId, info = {}) {
     x: 2500, y: 2500, angle: 0,
     hp: 100, armor: 0, dead: false,
     slotIdx: 0, inv: [],
-    piercingTimer: 0,
   };
   room.players.set(player.socketId, rp);
   room.scores[player.socketId] = { k: 0, d: 0, score: 0, name: player.name };
@@ -1088,16 +1085,12 @@ setInterval(() => {
 
     // World snapshot
     const snapshot = [];
-    room.players.forEach((p, sid) => {
-      if (p.piercingTimer > 0) p.piercingTimer = Math.max(0, p.piercingTimer - dtSec);
-      snapshot.push({
-        socketId: sid, name: p.name, skin: p.skin, hat: p.hat, face: p.face,
-        team: p.team, infTeam: p.infTeam,
-        x: p.x, y: p.y, angle: p.angle,
-        hp: p.hp, armor: p.armor, dead: p.dead, kills: p.kills,
-        piercingTimer: p.piercingTimer,
-      });
-    });
+    room.players.forEach((p, sid) => snapshot.push({
+      socketId: sid, name: p.name, skin: p.skin, hat: p.hat, face: p.face,
+      team: p.team, infTeam: p.infTeam,
+      x: p.x, y: p.y, angle: p.angle,
+      hp: p.hp, armor: p.armor, dead: p.dead, kills: p.kills,
+    }));
     broadcast(room, { type: 'world_snapshot', players: snapshot, scores: room.scores });
   });
 }, TICK_MS);
