@@ -588,7 +588,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <canvas id="menuSlime" width="80" height="80" style="display:block;margin:0 auto 12px;"></canvas>
       <div class="menu-logo-title">SLIME WARS</div>
       <div class="menu-logo-sub">ADVANCED EDITION</div>
-      <div class="menu-logo-edition">v3 ARSENAL EDITION &nbsp;·&nbsp; 22 WEAPONS · NUKE STRIKE</div>
+      <div class="menu-logo-edition">v3.1 ARSENAL EDITION &nbsp;·&nbsp; 5 MODES · 22 WEAPONS · NUKE</div>
     </div>
     <div class="menu-nav">
       <button class="menu-btn primary" onclick="showScreen('sBrowser')">▶ PLAY ONLINE</button>
@@ -616,14 +616,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
       <span class="news-col-hdr-badge">● NEW</span>
     </div>
 
-    <!-- ARMOR card -->
+    <!-- PATCH NOTES card -->
     <div class="nc armor-card">
       <div class="nc-img"><canvas id="ncArmor" width="216" height="90"></canvas></div>
       <div class="nc-body">
-        <span class="nc-tag armor">🛡 ARMOR BUFFED</span>
-        <div class="nc-title">60% DAMAGE REDUCTION</div>
-        <div class="nc-text">Armor now blocks <strong style="color:#3af">60% of each hit</strong>, up from 40%. Care Package = full armor. Shield streak = +50. Stack it before pushing — it drains with hits.</div>
-        <div class="nc-sub">Armor pickups on map · Shield streak = +50 armor</div>
+        <span class="nc-tag armor">🛠 PATCH v3.1</span>
+        <div class="nc-title">BUG FIXES &amp; IMPROVEMENTS</div>
+        <div class="nc-text"><strong style="color:#4f4">TDM scoring fixed</strong> — teammate kills now count for your team. <strong style="color:#39ff14">KOTH online</strong> — all zones now sync server-side so A/B/C show the same state for everyone. <strong style="color:#f44">Infection</strong> — bullet kills now infect instead of eliminate. Gun game bots cycle weapons on kills.</div>
+        <div class="nc-sub">Map generation fix · Last-survivor UAV tracker · 10+ bug fixes</div>
       </div>
     </div>
 
@@ -642,9 +642,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
     <div class="nc">
       <div class="nc-img"><canvas id="ncModes" width="216" height="90"></canvas></div>
       <div class="nc-body">
-        <span class="nc-tag mode">⚔ GAME MODES</span>
-        <div class="nc-title">FFA · TDM · GUN GAME</div>
-        <div class="nc-text"><strong style="color:#fa4">FFA</strong>: 30 kills wins. <strong style="color:#3af">TDM</strong>: 50 team kills, auto-balanced teams, friendly fire blocked. <strong style="color:#c09aff">Gun Game</strong>: cycle all 22 weapons — first to finish wins.</div>
+        <span class="nc-tag mode">⚔ 5 GAME MODES</span>
+        <div class="nc-title">FFA · TDM · GUN GAME · KOTH · INFECTION</div>
+        <div class="nc-text"><strong style="color:#fa4">FFA</strong>: 30 kills wins. <strong style="color:#3af">TDM</strong>: 50 team kills, auto-balance, no friendly fire. <strong style="color:#c09aff">Gun Game</strong>: cycle 22 weapons first to win. <strong style="color:#fbbf24">KOTH</strong>: hold A/B/C to score 100pts. <strong style="color:#4f4">Infection</strong>: survive 3 minutes or infect everyone.</div>
         <div class="nc-sub">Up to 12 players per room · Host can force start</div>
       </div>
     </div>
@@ -1282,6 +1282,8 @@ function handleServerMsg(msg) {
       msg.players.forEach(p => {
         if (p.socketId !== mySocketId)
           remotePlayers[p.socketId] = { ...remotePlayers[p.socketId], ...p };
+        else if (G.player && p.piercingTimer !== undefined)
+          G.player._piercingTimer = p.piercingTimer;
       });
       if (msg.scores) G.scores = { ...G.scores, ...msg.scores };
       break;
@@ -1972,6 +1974,11 @@ function generateVolcanoMap(){
     const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
     if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-2,timer:0});
   }
+  // Piercing rounds
+  for(let i=0;i<3;i++){
+    const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
+    if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-4,timer:30});
+  }
 
   // ── 7. SPAWN POINTS on platforms ───────────────────────────────
   G.spawnPoints=[];
@@ -2048,6 +2055,11 @@ function generateMap(){
   for(let i=0;i<3;i++){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
     weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-3,timer:30});
+  }
+  // Piercing rounds
+  for(let i=0;i<3;i++){
+    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
+    weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-4,timer:30});
   }
 
   // Speed pads — glowing arrows on roads
@@ -2592,6 +2604,13 @@ function playerPickup(weaponId){
     SND.pickup();
     return true;
   }
+  if(weaponId===-4){ // piercing rounds
+    p._piercingTimer = 30;
+    showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (30s)');
+    SND.pickup();
+    if(currentRoomId && typeof wsSend === 'function') wsSend({ type: 'piercing_pickup' });
+    return true;
+  }
   for(let i=0;i<MAX_SLOTS;i++){
     if(p.inv[i]&&p.inv[i].weaponId===weaponId){
       p.inv[i].curAmmo=getWeaponDef(weaponId).max;
@@ -2825,6 +2844,10 @@ function killEntity(killer,victim){
   if(!G.scores[vn])G.scores[vn]={k:0,d:0,score:0};
   G.scores[kn].k++;G.scores[kn].score+=100;
   G.scores[vn].d++;
+  // Track kills on the entity itself (needed for TDM team totals)
+  if(!killer.isPlayer){ killer.kills=(killer.kills||0)+1; }
+  if(victim.isPlayer) victim.deaths=(victim.deaths||0)+1;
+  else { victim.deaths=(victim.deaths||0)+1; }
   if(killer.isPlayer){
     G.player.kills++;
     G.player.nukeKills=(G.player.nukeKills||0)+1;
@@ -2876,8 +2899,10 @@ function checkWin(){
   const lim=G.scoreLimit;
   if(gameMode==='ffa'){
     for(const [n,sc] of Object.entries(G.scores)){ if(sc.k>=lim){endGame(n);return;} }
-  } else {
-    let b=G.player.kills,r=0;
+  } else if(gameMode==='tdm') {
+    let b=0,r=0;
+    // Player kills go to their actual team
+    if(G.player.team===0) b+=G.player.kills; else r+=G.player.kills;
     G.npcs.forEach(n=>{ if(n.team===0)b+=n.kills||0; else r+=n.kills||0; });
     if(b>=lim)endGame('BLUE TEAM'); else if(r>=lim)endGame('RED TEAM');
   }
@@ -2891,7 +2916,10 @@ function endGame(winner){
     (G.player?.team === 1 && winner === 'INFECTED WIN') ||
     (G.player?.team === 0 && (winner === 'SURVIVORS WIN' || (typeof winner === 'string' && winner.includes('SURVIVORS WIN'))))
   );
-  const _playerWon = winner === playerName || winner === 'BLUE TEAM' || _infWinForPlayer;
+  const _playerWon = winner === playerName ||
+    (winner === 'BLUE TEAM' && G.player?.team === 0) ||
+    (winner === 'RED TEAM'  && G.player?.team === 1) ||
+    _infWinForPlayer;
   document.getElementById('goTitle').textContent = _playerWon ? `${winner} 🏆` : `${winner}`;
   document.getElementById('goSub').textContent=`${G.player.kills} kills / ${G.player.deaths} deaths`;
   const sorted=Object.entries(G.scores).sort((a,b)=>b[1].k-a[1].k).slice(0,8);
@@ -2981,6 +3009,7 @@ function updateNPC(npc,dt){
     if(npc.respawnTimer<=0){
       const sp=getSpawnPoint([G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)]);
       npc.x=sp.x;npc.y=sp.y;npc.hp=npc.maxHp;npc.armor=0;npc.dead=false;npc.flicker=0;
+      // kills intentionally NOT reset on respawn — cumulative for TDM team totals
       // Gun game: respawn with correct slot weapon
       if(isGunGame()){
         if(npc._ggSlot===undefined)npc._ggSlot=0;
@@ -3269,6 +3298,7 @@ function updatePlayer(dt){
     }
   });
   if(p._speedBoost>0) p._speedBoost=Math.max(0,p._speedBoost-dt);
+  if(p._piercingTimer>0) p._piercingTimer=Math.max(0,p._piercingTimer-dt);
 
   // Trail particles
   if(p.trail&&p.trail!=='🚫'&&(mdx||mdy)){
@@ -3447,7 +3477,10 @@ function updateBullets(dt){
         if(Math.hypot(t.x-b.x,t.y-b.y)<t.r){
           if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner); else dealDamage(b.owner,t,b.dmg);
           if(b.poison&&!t.dead){ t._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
-          if(!b.boomerang) hit=true; // boomerang can keep going
+          const ownerPiercing = b.owner.isPlayer
+            ? (G.player && G.player._piercingTimer > 0)
+            : (b.ownerId && remotePlayers[b.ownerId] && remotePlayers[b.ownerId].piercingTimer > 0);
+          if(!b.boomerang && !ownerPiercing) hit=true; // boomerang or piercing can keep going
         }
       }
       // Fix 1a: Remote multiplayer players as targets for local player bullets
@@ -3464,7 +3497,8 @@ function updateBullets(dt){
             wsSend({type:'hit_player', targetId:rp.socketId, damage:b.dmg,
               weapon:playerWeapon()?.def?.name||'?'});
             // Server will respond with a 'hitmarker' message — don't call showHitmarker here
-            if(!b.boomerang) hit=true;
+            const piercing = G.player && G.player._piercingTimer > 0;
+            if(!b.boomerang && !piercing) hit=true;
           }
         }
       }
@@ -3879,11 +3913,6 @@ function drawPickups(){
       ctx.fillText('🛡️',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(100,180,255,.9)'; ctx.font='bold 10px sans-serif';
       ctx.textBaseline='top'; ctx.fillText('ARMOR',sp.x,sp.y+bob+18);
-    } else if(sp.weaponId===-4){
-      // Piercing rounds
-      activatePiercing();
-      sp.timer=45;
-      showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (15s)');
     } else if(sp.weaponId===-2){
       // Medkit (+25 HP)
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
@@ -4098,7 +4127,8 @@ function updateHUD(){
     document.getElementById('scoreDisp').textContent=`${p.kills} / 22`;
     document.getElementById('scoreLbl').textContent='GUN GAME — KILLS TO ADVANCE';
   } else {
-    let b=p.kills,r=0;
+    let b=0,r=0;
+    if(p.team===0) b+=p.kills; else r+=p.kills;
     G.npcs.forEach(n=>{ if(n.team===0)b+=n.kills||0; else r+=n.kills||0; });
     document.getElementById('scoreDisp').innerHTML=`<span style="color:#3af">${b}</span> — <span style="color:#f44">${r}</span>`;
     document.getElementById('scoreLbl').textContent=`BLUE vs RED · ${G.scoreLimit} TO WIN`;
@@ -4734,7 +4764,7 @@ function startGameFromLobby(){
   // Choose map from currentPendingMap (set by server on create_room / game_start)
   // In solo mode, currentPendingMap is already set by launchSoloPractice from _soloSettings.map
   let _mapToUse = currentPendingMap;
-  if(!currentRoomId && selectedServer && !_soloSettings.map){
+  if(!currentRoomId && selectedServer && !(typeof _soloSettings !== 'undefined' && _soloSettings.map)){
     // Legacy path: offline server browser join (not solo practice modal)
     const srvName=(selectedServer?.name||'').toUpperCase();
     if(srvName.includes('FOREST')||srvName.includes('WOOD')||srvName.includes('JUNGLE')) _mapToUse='forest';
@@ -4744,9 +4774,14 @@ function startGameFromLobby(){
   // Clear mode-specific state from previous games
   if(typeof kothZones !== 'undefined') kothZones=[];
   if(typeof kothHillIdx !== 'undefined') kothHillIdx=0;
-  _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
-  window._infLastSurvivorTarget=null; _infLastSurvivorPing=null;
-  supplyCrates=[];
+  if(typeof supplyCrates !== 'undefined') supplyCrates=[];
+  // Infection state vars are declared later in the file — guard with typeof
+  if(typeof _infTimer !== 'undefined') _infTimer=0;
+  if(typeof _infTimeLeft !== 'undefined' && typeof _INF_TIME !== 'undefined') _infTimeLeft=_INF_TIME;
+  if(typeof _infPhase !== 'undefined') _infPhase='running';
+  if(typeof _infLastSurvivorWarned !== 'undefined') _infLastSurvivorWarned=false;
+  window._infLastSurvivorTarget=null;
+  if(typeof _infLastSurvivorPing !== 'undefined') _infLastSurvivorPing=null;
   if(_mapToUse==='forest') generateForestMap();
   else if(_mapToUse==='volcano') generateVolcanoMap();
   else generateMap();
@@ -4772,7 +4807,7 @@ function startGameFromLobby(){
         if(lobbyPlayers[i]._forcedSkill !== undefined) npc.skill = lobbyPlayers[i]._forcedSkill;
       }
       // Gun game: init bots at slot 0 with the starting weapon
-      if(isGunGame()){
+      if(isGunGame() && typeof GUN_GAME_ORDER !== 'undefined'){
         npc._ggSlot=0;
         const startWid=GUN_GAME_ORDER[0];
         npc.inv=[makeSlot(startWid),null,null,null,null];
@@ -4802,7 +4837,7 @@ function startGameFromLobby(){
   if(animFrame)cancelAnimationFrame(animFrame);
   adsActive=false; adsFov=0; adsTarget=0;
   addGChat('SERVER','Game started! Good luck! 🎮');
-  MUS.crossfadeToGame();
+  if(typeof MUS !== 'undefined') MUS.crossfadeToGame();
   requestAnimationFrame(ts=>{G.lastTime=ts;animFrame=requestAnimationFrame(gameLoop);});
 }
 
@@ -4816,7 +4851,7 @@ function exitToMenu(){
   if(animFrame){cancelAnimationFrame(animFrame);animFrame=null;}
   if(lobbyInterval){clearInterval(lobbyInterval);lobbyInterval=null;}
   if(currentRoomId){ wsSend({type:'leave_room'}); currentRoomId=null; remotePlayers={}; }
-  MUS.crossfadeToMenu();
+  if(typeof MUS !== 'undefined') MUS.crossfadeToMenu();
   showScreen('sMenu');
 }
 
@@ -7095,7 +7130,8 @@ function updateStatsPanel(){
     const myRank      = sorted.findIndex(([key])=>key===myKey)+1 || sorted.length;
     ctx.innerHTML = `🏆 LEADER: <span style="color:#ffe000">${leaderName.slice(0,10)}</span> (${leaderK}K)<br>📊 RANK: <span style="color:var(--orange)">#${myRank}</span> / ${sorted.length}`;
   } else if(gameMode === 'tdm'){
-    let b=G.player.kills, r=0;
+    let b=0, r=0;
+    if(G.player.team===0) b+=G.player.kills; else r+=G.player.kills;
     G.npcs.forEach(n=>{ if(n.team===0)b+=n.kills||0; else r+=n.kills||0; });
     const myTeam = G.player.team===0?'BLUE':'RED';
     const leading = b>r?'🔵 BLUE':r>b?'🔴 RED':'TIE';
@@ -7696,6 +7732,7 @@ setTimeout(()=>{
     const tStr = Math.ceil(_infTimeLeft)+'s';
     // Urgency thresholds scaled to 180 s: red <30 s, amber <60 s, green otherwise.
     const urgency = _infTimeLeft<30?'color:#f44':_infTimeLeft<60?'color:#fa4':'color:#4f4';
+    let lastSurvivorPin = '';
     if(window._infLastSurvivorTarget && playerAlive && G.player.team===1){
       const tgt = window._infLastSurvivorTarget;
       const dx = tgt.x - G.player.x, dy = tgt.y - G.player.y;
@@ -8436,24 +8473,109 @@ window.startGameFromLobby = function(){
     }
   };
 
-  // Handle incoming infection_team + infection_last_survivor from server
+  // Handle server messages for infection + KOTH + you_infected
   const _origHSM2 = window.handleServerMsg;
   window.handleServerMsg = function(msg){
+
+    // ── Infection: remote player's team changed ──────────────────
     if(msg.type === 'infection_team'){
       const rp = remotePlayers[msg.socketId];
       if(rp) rp.infTeam = msg.team;
+      // Don't return — fall through so kill_event / HUD still updates
       return;
     }
-    // ── Server pushes the last survivor's live position every tick ──
+
+    // ── Infection: server tells US we got infected by a bullet ───
+    if(msg.type === 'you_infected'){
+      if(G.player && !G.player.dead){
+        _infectPlayer();   // sets our team to 1, changes color, etc.
+        G.player.hp = 80;
+        addGChat('SERVER', `🦠 You were infected by ${msg.killerName}!`);
+        SND.kill && SND.kill();
+      }
+      return;
+    }
+
+    // ── Infection: authoritative timer from server ───────────────
+    if(msg.type === 'infection_tick'){
+      if(typeof _infTimeLeft !== 'undefined') _infTimeLeft = msg.timeLeft;
+      return;
+    }
+
+    // ── Server pushes the last survivor's live position every tick ─
     if(msg.type === 'infection_last_survivor'){
       if(msg.socketId){
         _infLastSurvivorPing = { socketId: msg.socketId, name: msg.name, x: msg.x, y: msg.y };
       } else {
-        _infLastSurvivorPing = null; // cleared — more than one survivor again
+        _infLastSurvivorPing = null;
       }
       return;
     }
+
+    // ── KOTH: server-authoritative zone/score sync ───────────────
+    if(msg.type === 'koth_sync'){
+      applyServerKOTH(msg.koth);
+      return;
+    }
+
+    // ── KOTH: hill rotated server-side ───────────────────────────
+    if(msg.type === 'koth_hill_moved'){
+      if(typeof kothHillIdx !== 'undefined') kothHillIdx = msg.hillIdx;
+      if(typeof kothZones !== 'undefined' && kothZones[msg.hillIdx]){
+        showNotif(`👑 HILL MOVED: ${msg.label}!`, 2000);
+        addGChat('SERVER', `👑 Active hill moved to ${msg.label}!`);
+      }
+      return;
+    }
+
     _origHSM2(msg);
+  };
+
+  // Apply server KOTH state to local kothZones / kothScores / kothHillIdx
+  function applyServerKOTH(k){
+    if(!k || typeof kothZones === 'undefined') return;
+    // Sync zones
+    if(k.zones && kothZones.length === k.zones.length){
+      k.zones.forEach((sz, i) => {
+        kothZones[i].captureProgress = sz.captureProgress;
+        kothZones[i].captured = sz.captured === 'blue'
+          ? (G.player && G.player.team === 0 ? 'player' : 'enemy')
+          : sz.captured === 'red'
+          ? (G.player && G.player.team === 1 ? 'player' : 'enemy')
+          : null;
+      });
+    }
+    if(k.hillIdx !== undefined) kothHillIdx = k.hillIdx;
+    if(k.hillTimer !== undefined && typeof kothHillTimer !== 'undefined') kothHillTimer = k.hillTimer;
+    // Sync team scores
+    if(k.teamScores && typeof kothScores !== 'undefined'){
+      const myTeam = G.player ? G.player.team : 0;
+      kothScores.p = myTeam === 0 ? k.teamScores.blue : k.teamScores.red;
+      kothScores.e = myTeam === 0 ? k.teamScores.red  : k.teamScores.blue;
+    }
+    // Sync per-player KOTH scores into kothIndivScores
+    if(k.scores && typeof kothIndivScores !== 'undefined'){
+      Object.entries(k.scores).forEach(([sid, pts]) => {
+        const isMe = sid === mySocketId;
+        const rp   = remotePlayers[sid] || {};
+        const name = isMe ? playerName : (rp.name || sid.slice(0,8));
+        if(!kothIndivScores[sid]) kothIndivScores[sid] = { name, pts: 0, isPlayer: isMe };
+        kothIndivScores[sid].pts = pts;
+      });
+    }
+  }
+
+  // In online KOTH, suppress local updateKOTH capture logic (server is authoritative)
+  // but keep the HUD rendering. Wrap updateKOTH to skip capture/scoring when online.
+  const _origUpdateKOTH = window.updateKOTH || updateKOTH;
+  window.updateKOTH = function(dt){
+    if(currentRoomId && gameMode === 'koth'){
+      // Online: skip capture/scoring tick — server handles it.
+      // Just render the HUD with server-synced state.
+      _origUpdateKOTH(0); // dt=0 so no scoring/timers tick locally
+    } else {
+      _origUpdateKOTH(dt);
+    }
   };
 
   // Reset the ping on every new game so stale data never shows
