@@ -1282,8 +1282,6 @@ function handleServerMsg(msg) {
       msg.players.forEach(p => {
         if (p.socketId !== mySocketId)
           remotePlayers[p.socketId] = { ...remotePlayers[p.socketId], ...p };
-        else if (G.player && p.piercingTimer !== undefined)
-          G.player._piercingTimer = p.piercingTimer;
       });
       if (msg.scores) G.scores = { ...G.scores, ...msg.scores };
       break;
@@ -1974,11 +1972,6 @@ function generateVolcanoMap(){
     const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
     if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-2,timer:0});
   }
-  // Piercing rounds
-  for(let i=0;i<3;i++){
-    const sp=safeSpots[Math.floor(Math.random()*Math.max(1,safeSpots.length))];
-    if(sp) weaponSpawns.push({x:sp.x,y:sp.y,weaponId:-4,timer:30});
-  }
 
   // ── 7. SPAWN POINTS on platforms ───────────────────────────────
   G.spawnPoints=[];
@@ -2055,11 +2048,6 @@ function generateMap(){
   for(let i=0;i<3;i++){
     const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
     weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-3,timer:30});
-  }
-  // Piercing rounds
-  for(let i=0;i<3;i++){
-    const rd=mapRoads[Math.floor(Math.random()*mapRoads.length)];
-    weaponSpawns.push({x:rd.x+10+Math.random()*(rd.w-20),y:rd.y+10+Math.random()*(rd.h-20),weaponId:-4,timer:30});
   }
 
   // Speed pads — glowing arrows on roads
@@ -2602,13 +2590,6 @@ function playerPickup(weaponId){
     p.hp=p.maxHp;
     showNotif('❤️ FULLY HEALED!');
     SND.pickup();
-    return true;
-  }
-  if(weaponId===-4){ // piercing rounds
-    p._piercingTimer = 30;
-    showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (30s)');
-    SND.pickup();
-    if(currentRoomId && typeof wsSend === 'function') wsSend({ type: 'piercing_pickup' });
     return true;
   }
   for(let i=0;i<MAX_SLOTS;i++){
@@ -3298,7 +3279,6 @@ function updatePlayer(dt){
     }
   });
   if(p._speedBoost>0) p._speedBoost=Math.max(0,p._speedBoost-dt);
-  if(p._piercingTimer>0) p._piercingTimer=Math.max(0,p._piercingTimer-dt);
 
   // Trail particles
   if(p.trail&&p.trail!=='🚫'&&(mdx||mdy)){
@@ -3477,10 +3457,7 @@ function updateBullets(dt){
         if(Math.hypot(t.x-b.x,t.y-b.y)<t.r){
           if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner); else dealDamage(b.owner,t,b.dmg);
           if(b.poison&&!t.dead){ t._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
-          const ownerPiercing = b.owner.isPlayer
-            ? (G.player && G.player._piercingTimer > 0)
-            : (b.ownerId && remotePlayers[b.ownerId] && remotePlayers[b.ownerId].piercingTimer > 0);
-          if(!b.boomerang && !ownerPiercing) hit=true; // boomerang or piercing can keep going
+          if(!b.boomerang) hit=true; // boomerang can keep going
         }
       }
       // Fix 1a: Remote multiplayer players as targets for local player bullets
@@ -3497,8 +3474,7 @@ function updateBullets(dt){
             wsSend({type:'hit_player', targetId:rp.socketId, damage:b.dmg,
               weapon:playerWeapon()?.def?.name||'?'});
             // Server will respond with a 'hitmarker' message — don't call showHitmarker here
-            const piercing = G.player && G.player._piercingTimer > 0;
-            if(!b.boomerang && !piercing) hit=true;
+            if(!b.boomerang) hit=true;
           }
         }
       }
@@ -3913,6 +3889,11 @@ function drawPickups(){
       ctx.fillText('🛡️',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(100,180,255,.9)'; ctx.font='bold 10px sans-serif';
       ctx.textBaseline='top'; ctx.fillText('ARMOR',sp.x,sp.y+bob+18);
+    } else if(sp.weaponId===-4){
+      // Piercing rounds
+      activatePiercing();
+      sp.timer=45;
+      showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (15s)');
     } else if(sp.weaponId===-2){
       // Medkit (+25 HP)
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
