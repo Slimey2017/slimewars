@@ -297,6 +297,39 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 #hudADS.vis{display:block;}
 #hudADS canvas{position:absolute;inset:0;width:100%;height:100%;}
 
+/* ── In-game live stats panel ──────────────────────────────── */
+#hudStats{
+  position:absolute;bottom:148px;left:18px;
+  background:rgba(5,12,25,.82);
+  border:1px solid rgba(26,53,80,.9);
+  border-left:2px solid var(--orange);
+  padding:7px 11px 7px 10px;
+  pointer-events:none;
+  min-width:148px;
+  backdrop-filter:blur(3px);
+}
+.hstat-hdr{
+  font-family:'Orbitron';font-size:8px;color:var(--orange);
+  letter-spacing:3px;margin-bottom:6px;display:flex;align-items:center;gap:5px;
+}
+.hstat-hdr::after{content:'';flex:1;height:1px;background:rgba(249,115,22,.3);}
+.hstat-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:2px 0;border-bottom:1px solid rgba(26,53,80,.35);
+  font-size:10px;
+}
+.hstat-row:last-child{border-bottom:none;}
+.hstat-lbl{color:#4a7a9a;letter-spacing:1px;font-size:9px;}
+.hstat-val{color:#cde;font-family:'Orbitron';font-size:10px;font-weight:700;}
+.hstat-val.green{color:#39ff14;}
+.hstat-val.red{color:#f44;}
+.hstat-val.amber{color:#fa4;}
+.hstat-val.orange{color:var(--orange);}
+.hstat-ctx{
+  margin-top:5px;padding-top:5px;border-top:1px solid rgba(26,53,80,.5);
+  font-size:9px;color:#3a6a8a;letter-spacing:1px;line-height:1.5;
+}
+
 /* Sprint indicator */
 #hudSprint{position:absolute;bottom:148px;left:18px;font-size:9px;color:#4a8aaa;letter-spacing:2px;display:none;}
 #hudSprint.vis{display:block;}
@@ -939,6 +972,19 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 
   <!-- Sprint -->
   <div id="hudSprint">⚡ SPRINTING</div>
+
+  <!-- Live stats panel -->
+  <div id="hudStats">
+    <div class="hstat-hdr">STATS</div>
+    <div class="hstat-row"><span class="hstat-lbl">TIME</span><span class="hstat-val" id="hstatTime">0:00</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">KILLS</span><span class="hstat-val green" id="hstatKills">0</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">DEATHS</span><span class="hstat-val red" id="hstatDeaths">0</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">K/D</span><span class="hstat-val orange" id="hstatKD">—</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">DAMAGE</span><span class="hstat-val amber" id="hstatDmg">0</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">STREAK</span><span class="hstat-val" id="hstatStreak">0</span></div>
+    <div class="hstat-row"><span class="hstat-lbl">ACCURACY</span><span class="hstat-val" id="hstatAcc">—</span></div>
+    <div class="hstat-ctx" id="hstatCtx"></div>
+  </div>
 
   <!-- Crosshair -->
   <svg id="hudCross" width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -2810,6 +2856,14 @@ function killEntity(killer,victim){
     // Advance gun game on kill (offline mode — online handled via kill_confirmed)
     if(isGunGame() && !currentRoomId) advanceGunGame();
   }
+  // Gun game: advance NPC slot on kill
+  if(!killer.isPlayer && isGunGame()){
+    if(killer._ggSlot===undefined) killer._ggSlot=0;
+    killer._ggSlot=Math.min(killer._ggSlot+1, GUN_GAME_ORDER.length-1);
+    const wid=GUN_GAME_ORDER[killer._ggSlot];
+    killer.inv=[makeSlot(wid),null,null,null,null];
+    killer.slotIdx=0;
+  }
   if(victim.isPlayer) G.player.deaths++;
   addKillFeed(kn,vn);
   if(Math.random()<.2) addGChat(NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],GAME_CHAT_MSGS[Math.floor(Math.random()*GAME_CHAT_MSGS.length)]);
@@ -2850,7 +2904,8 @@ function endGame(winner){
 function getNearestEnemy(npc){
   let best=null,bestD=Infinity;
   let cands;
-  if(gameMode==='ffa') cands=[G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)];
+  // Gun game is always FFA targeting (no teams), infection uses team logic
+  if(gameMode==='ffa'||gameMode==='gungame'||gameMode==='koth') cands=[G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)];
   else {
     const others=G.npcs.filter(n=>n!==npc&&!n.dead&&n.team!==npc.team);
     cands=G.player&&!G.player.dead&&G.player.team!==npc.team?[G.player,...others]:others;
@@ -2926,8 +2981,17 @@ function updateNPC(npc,dt){
     if(npc.respawnTimer<=0){
       const sp=getSpawnPoint([G.player,...G.npcs.filter(n=>n!==npc&&!n.dead)]);
       npc.x=sp.x;npc.y=sp.y;npc.hp=npc.maxHp;npc.armor=0;npc.dead=false;npc.flicker=0;
-      npc.inv=[makeSlot(0),makeSlot(1+Math.floor(Math.random()*(WEAPONS_BASE.length-1))),null,null,null];
-      npc.slotIdx=1; npc.aiState='patrol';
+      // Gun game: respawn with correct slot weapon
+      if(isGunGame()){
+        if(npc._ggSlot===undefined)npc._ggSlot=0;
+        const wid=GUN_GAME_ORDER[Math.min(npc._ggSlot,GUN_GAME_ORDER.length-1)];
+        npc.inv=[makeSlot(wid),null,null,null,null];
+        npc.slotIdx=0;
+      } else {
+        npc.inv=[makeSlot(0),makeSlot(1+Math.floor(Math.random()*(WEAPONS_BASE.length-1))),null,null,null];
+        npc.slotIdx=1;
+      }
+      npc.aiState='patrol';
     }
     return;
   }
@@ -2960,8 +3024,8 @@ function updateNPC(npc,dt){
 
   if(!target){ npc.aiState='patrol'; }
 
-  // ── KOTH: redirect bots to active zone ──────────────────────────
-  if(gameMode==='koth'&&kothZones.length){
+  // ── KOTH: redirect bots to active zone (NOT in gun game or infection) ──
+  if(gameMode==='koth'&&!isGunGame()&&kothZones&&kothZones.length){
     const activeZone=kothZones[kothHillIdx];
     if(activeZone){
       const distToZone=Math.hypot(npc.x-activeZone.x,npc.y-activeZone.y);
@@ -3232,6 +3296,7 @@ function shoot(){
   const p=G.player; if(p.dead)return;
   const pw=playerWeapon(); if(!pw)return;
   if(pw.slot.curAmmo<=0||pw.slot.reloading)return;
+  recordShot(); // track shots fired for accuracy stat
   if(pw.def.burst){
     // Burst: fire burst.count shots with burstDelay ms apart
     let fired=0;
@@ -4107,6 +4172,9 @@ function updateHUD(){
         </div>`;
       }).join('');
   } else document.getElementById('hudSB').classList.remove('vis');
+
+  // Live stats panel
+  updateStatsPanel();
 }
 
 function drawCrosshair(){
@@ -4292,6 +4360,9 @@ function gameLoop(ts){
     // Only run NPC AI in offline/solo mode
     if(!currentRoomId){
       G.npcs.forEach(n=>updateNPC(n,dt));
+      // Infection update: must tick even when player is dead (survivors can win mid-respawn)
+      // window.updateInfection is the authoritative version (set in patch block)
+      if(isInfection() && G.player && G.player.dead) window.updateInfection(dt);
       if(Math.random()<dt*.015) addGChat(NPC_NAMES[Math.floor(Math.random()*NPC_NAMES.length)],GAME_CHAT_MSGS[Math.floor(Math.random()*GAME_CHAT_MSGS.length)]);
       // Gun game offline kill detection
       if(isGunGame() && G.player && G.player.kills > _ggLastKills){
@@ -4670,6 +4741,12 @@ function startGameFromLobby(){
     else if(selectedServer?.map) _mapToUse=selectedServer.map;
   }
   speedPads=[];
+  // Clear mode-specific state from previous games
+  if(typeof kothZones !== 'undefined') kothZones=[];
+  if(typeof kothHillIdx !== 'undefined') kothHillIdx=0;
+  _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
+  window._infLastSurvivorTarget=null; _infLastSurvivorPing=null;
+  supplyCrates=[];
   if(_mapToUse==='forest') generateForestMap();
   else if(_mapToUse==='volcano') generateVolcanoMap();
   else generateMap();
@@ -4693,6 +4770,13 @@ function startGameFromLobby(){
         npc.skin=lobbyPlayers[i].skin;
         // Apply forced skill from solo practice difficulty
         if(lobbyPlayers[i]._forcedSkill !== undefined) npc.skill = lobbyPlayers[i]._forcedSkill;
+      }
+      // Gun game: init bots at slot 0 with the starting weapon
+      if(isGunGame()){
+        npc._ggSlot=0;
+        const startWid=GUN_GAME_ORDER[0];
+        npc.inv=[makeSlot(startWid),null,null,null,null];
+        npc.slotIdx=0;
       }
       G.npcs.push(npc);
       G.scores[npc.name]={k:0,d:0,score:0};
@@ -6939,10 +7023,101 @@ function announceKillStreak(count){
   }
 }
 
-// ─── POST-MATCH STATS removed ────────────────────────────────────
-function resetMatchStats(){}
-function recordShot(){}
-function recordHitDmg(){}
+// ─── LIVE MATCH STATS ────────────────────────────────────────────
+let _matchShotsFired = 0;
+let _matchShotsHit   = 0;
+let _matchDmgDealt   = 0;
+
+function resetMatchStats(){
+  _matchShotsFired = 0;
+  _matchShotsHit   = 0;
+  _matchDmgDealt   = 0;
+}
+
+function recordShot(){
+  _matchShotsFired++;
+}
+
+function recordHitDmg(dmg){
+  if(dmg > 0){
+    _matchShotsHit++;
+    _matchDmgDealt += Math.round(dmg);
+  }
+}
+
+function updateStatsPanel(){
+  const el = document.getElementById('hudStats');
+  if(!el || !G || !G.player) return;
+
+  // Time
+  const secs = Math.floor(G.gameTime);
+  const mm = String(Math.floor(secs/60)).padStart(1,'0');
+  const ss = String(secs%60).padStart(2,'0');
+  document.getElementById('hstatTime').textContent = `${mm}:${ss}`;
+
+  // Kills / Deaths
+  const k = G.player.kills  || 0;
+  const d = G.player.deaths || 0;
+  document.getElementById('hstatKills').textContent  = k;
+  document.getElementById('hstatDeaths').textContent = d;
+
+  // K/D
+  const kdEl = document.getElementById('hstatKD');
+  if(d === 0){ kdEl.textContent = k > 0 ? '∞' : '—'; }
+  else        { kdEl.textContent = (k/d).toFixed(2); }
+  kdEl.className = 'hstat-val ' + (d===0&&k>0?'green': k>=d?'orange':'amber');
+
+  // Damage dealt
+  document.getElementById('hstatDmg').textContent = _matchDmgDealt;
+
+  // Current kill streak
+  const streakEl = document.getElementById('hstatStreak');
+  streakEl.textContent = _killStreakCount || 0;
+  streakEl.className   = 'hstat-val ' + (_killStreakCount>=5?'orange':_killStreakCount>=2?'amber':'green');
+
+  // Accuracy
+  const accEl = document.getElementById('hstatAcc');
+  if(_matchShotsFired === 0){ accEl.textContent = '—'; accEl.className = 'hstat-val'; }
+  else {
+    const pct = Math.round((_matchShotsHit/_matchShotsFired)*100);
+    accEl.textContent = pct + '%';
+    accEl.className   = 'hstat-val ' + (pct>=50?'green':pct>=25?'amber':'red');
+  }
+
+  // Context line — mode-specific info
+  const ctx = document.getElementById('hstatCtx');
+  if(gameMode === 'ffa'){
+    const sorted = Object.entries(G.scores).sort((a,b)=>b[1].k-a[1].k);
+    const leaderEntry = sorted[0];
+    const leaderName  = leaderEntry ? (leaderEntry[1].name || leaderEntry[0].slice(0,10)) : '—';
+    const leaderK     = leaderEntry ? leaderEntry[1].k : 0;
+    const myKey       = currentRoomId ? mySocketId : playerName;
+    const myRank      = sorted.findIndex(([key])=>key===myKey)+1 || sorted.length;
+    ctx.innerHTML = `🏆 LEADER: <span style="color:#ffe000">${leaderName.slice(0,10)}</span> (${leaderK}K)<br>📊 RANK: <span style="color:var(--orange)">#${myRank}</span> / ${sorted.length}`;
+  } else if(gameMode === 'tdm'){
+    let b=G.player.kills, r=0;
+    G.npcs.forEach(n=>{ if(n.team===0)b+=n.kills||0; else r+=n.kills||0; });
+    const myTeam = G.player.team===0?'BLUE':'RED';
+    const leading = b>r?'🔵 BLUE':r>b?'🔴 RED':'TIE';
+    ctx.innerHTML = `🛡 TEAM: <span style="color:${G.player.team===0?'#3af':'#f44'}">${myTeam}</span><br>📊 SCORE: <span style="color:#3af">${b}</span> — <span style="color:#f44">${r}</span> · ${leading}`;
+  } else if(gameMode === 'infection'){
+    const sCnt = G.npcs.filter(n=>!n.dead&&n.team===0).length + (G.player.team===0?1:0);
+    const iCnt = G.npcs.filter(n=>!n.dead&&n.team===1).length + (G.player.team===1?1:0);
+    const role = G.player.team===0?'<span style="color:#4f4">SURVIVOR</span>':'<span style="color:#f44">INFECTED</span>';
+    const timeLeft = Math.ceil(_infTimeLeft||0);
+    const tColor = timeLeft<30?'#f44':timeLeft<60?'#fa4':'#4f4';
+    ctx.innerHTML = `🦠 ROLE: ${role}<br>⏱ LEFT: <span style="color:${tColor}">${timeLeft}s</span> · 🟢${sCnt} 🦠${iCnt}`;
+  } else if(gameMode === 'gungame'){
+    const wid  = typeof GUN_GAME_ORDER !== 'undefined' ? GUN_GAME_ORDER[Math.min(typeof gunGameSlot!=='undefined'?gunGameSlot:0, 21)] : 0;
+    const wDef = getWeaponDef(wid);
+    ctx.innerHTML = `🔫 WEAPON: <span style="color:var(--orange)">${wDef?wDef.name:'—'}</span><br>📊 PROGRESS: <span style="color:#ffe000">${k}</span> / 22`;
+  } else if(gameMode === 'koth'){
+    const pPts = Math.floor(kothScores?.p||0), ePts = Math.floor(kothScores?.e||0);
+    ctx.innerHTML = `👑 POINTS: <span style="color:#39ff14">${pPts}</span> — <span style="color:#f44">${ePts}</span><br>📊 GOAL: ${typeof KOTH_WIN!=='undefined'?KOTH_WIN:100}`;
+  } else {
+    ctx.innerHTML = '';
+  }
+}
 
 // ─── SPECTATOR MODE ──────────────────────────────────────────────
 let _spectMode=false, _spectTarget=null;
@@ -7171,71 +7346,10 @@ function _infectPlayer(){
 }
 
 function updateInfection(dt){
-  if(!isInfection()||_infPhase!=='running')return;
-  _infTimeLeft=Math.max(0,_infTimeLeft-dt);
-
-  // Infected NPCs respawn quickly (5s), survivors are permanently eliminated
-  G.npcs.forEach(n=>{
-    if(!n.dead)return;
-    if(n.team===1){
-      // Infected respawn
-      n.respawnTimer=(n.respawnTimer||0)-dt;
-      if(n.respawnTimer<=0){
-        const sp=getSpawnPoint(G.npcs.filter(x=>!x.dead&&x!==n));
-        n.x=sp.x; n.y=sp.y; n.dead=false; n.hp=n.maxHp; n.armor=0;
-        n.respawnTimer=5;
-      }
-    }
-    // Survivors stay dead (permanently eliminated)
-  });
-
-  // Count living survivors and infected
-  const survivorNPCs=G.npcs.filter(n=>!n.dead&&n.team===0);
-  const playerAlive=G.player&&!G.player.dead;
-  const playerSurvivor=playerAlive&&G.player.team===0;
-  const totalSurvivors=survivorNPCs.length+(playerSurvivor?1:0);
-  const infectedNPCs=G.npcs.filter(n=>!n.dead&&n.team===1);
-  const totalInfected=infectedNPCs.length+(playerAlive&&G.player.team===1?1:0);
-
-  // Touch-infection: infected who touch survivors infect them
-  infectedNPCs.forEach(inf=>{
-    survivorNPCs.forEach(sur=>{
-      if(Math.hypot(inf.x-sur.x,inf.y-sur.y)<inf.r+sur.r+8){
-        _setInfected(sur);
-        addGChat('SERVER',`🦠 ${sur.name} was infected!`);
-      }
-    });
-    if(playerSurvivor&&Math.hypot(inf.x-G.player.x,inf.y-G.player.y)<inf.r+G.player.r+8){
-      _infectPlayer();
-    }
-  });
-
-  // Win conditions
-  if(totalSurvivors===0){
-    _infPhase='over';
-    endGame('INFECTED WIN');
-    return;
-  }
-  if(_infTimeLeft<=0){
-    _infPhase='over';
-    endGame(playerSurvivor?playerName+' & SURVIVORS WIN':'SURVIVORS WIN');
-    return;
-  }
-
-  // HUD
-  const tStr=Math.ceil(_infTimeLeft)+'s';
-  const urgency=_infTimeLeft<20?'color:#f44':_infTimeLeft<40?'color:#fa4':'color:#4f4';
-  const hud=document.getElementById('hudKOTH');
-  if(hud) hud.innerHTML=`
-    <div style="font-family:'Orbitron';font-size:9px;color:#39ff14;letter-spacing:2px;margin-bottom:3px;">🦠 INFECTION</div>
-    <div style="font-size:11px;margin-bottom:3px;"><span style="${urgency}">⏱ ${tStr}</span></div>
-    <div style="display:flex;gap:10px;font-size:10px;margin-bottom:3px;">
-      <span style="color:#4f4">🟢 ${totalSurvivors} surviving</span>
-      <span style="color:#f44">🦠 ${totalInfected} infected</span>
-    </div>
-    <div style="font-size:10px;font-weight:bold;color:${G.player.team===0?'#39ff14':'#f44'}">
-      ${G.player.team===0?'🟢 YOU: SURVIVOR':'🦠 YOU: INFECTED'}
-    </div>`;
+  // ── NEUTRALIZED: the authoritative updateInfection is window.updateInfection
+  // set in the patch block below. Calling this original version would double-tick
+  // _infTimeLeft. Do not add logic here.
+  return;
 }
 
 function checkInfectOnKill(killer, victim){
@@ -7247,8 +7361,9 @@ function checkInfectOnKill(killer, victim){
       // Undo death — player got infected, not killed
       if(G.player.dead){ G.player.dead=false; G.player.hp=60; }
     } else {
-      // NPC survivor was shot by infected — infect them
-      _setInfected(victim);
+      // NPC survivor was shot by infected — revive them as infected (undo death)
+      _setInfected(victim); // sets team=1, _infected=true, hp=maxHp, dead=false
+      // Remove from scores' death count since it's an infection not a kill
       addGChat('SERVER',`🦠 ${victim.name} was infected by a bullet!`);
     }
   }
@@ -7317,11 +7432,8 @@ window.updatePlayer=function(dt){
   updateHeartbeat();
   updateGrenadeCook(dt);
   updateKOTH(dt);
-  // NOTE: updateInfection(dt) is intentionally NOT called here.
-  // FIX 2 replaced window.updateInfection with its own version; calling it
-  // twice per frame would double-tick _infTimeLeft (Bug 4).  The call that
-  // already exists inside the original updatePlayer body (defined above in
-  // the main game code) is the single authoritative tick.
+  // Call the patched updateInfection (window.updateInfection is the FIX 2 version)
+  if(isInfection()) window.updateInfection(dt);
   updateLavaZones(dt);
   updateStickyBombs(dt);
   checkBarrelsForBullets();
@@ -7554,6 +7666,8 @@ setTimeout(()=>{
     // NPC-to-NPC contact infection only (player NOT infected by touch)
     infectedNPCs.forEach(inf=>{
       survivorNPCs.forEach(sur=>{
+        // Guard: don't double-infect already-infected bots
+        if(sur.team===1||sur._infected)return;
         if(Math.hypot(inf.x-sur.x, inf.y-sur.y) < inf.r + sur.r + 8){
           _setInfected(sur);
           addGChat('SERVER', `🦠 ${sur.name} was infected!`);
@@ -7562,16 +7676,26 @@ setTimeout(()=>{
       // ← Player contact infection removed intentionally
     });
 
-    if(totalSurvivors === 0){ _infPhase='over'; endGame('INFECTED WIN'); return; }
-    if(_infTimeLeft <= 0){ _infPhase='over'; endGame(playerSurvivor ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
+    // Re-count after infection propagation this frame
+    const survivorNPCsPost2 = G.npcs.filter(n=>!n.dead && n.team===0);
+    const playerSurvivorPost2 = playerAlive && G.player.team===0;
+    const totalSurvivorsPost2 = survivorNPCsPost2.length + (playerSurvivorPost2?1:0);
+    const totalInfectedPost2 = G.npcs.filter(n=>!n.dead&&n.team===1).length + (playerAlive && G.player.team===1 ? 1 : 0);
+
+    if(totalSurvivorsPost2 === 0){ _infPhase='over'; endGame('INFECTED WIN'); return; }
+    if(_infTimeLeft <= 0){ _infPhase='over'; endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
+
+    // Track last survivor for minimap (live position update each frame)
+    if(!currentRoomId){
+      const aliveSurvivors2=[...survivorNPCsPost2,...(playerSurvivorPost2?[G.player]:[])];
+      if(aliveSurvivors2.length===1){ window._infLastSurvivorTarget=aliveSurvivors2[0]; }
+      else { window._infLastSurvivorTarget=null; }
+    }
 
     // ── HUD ───────────────────────────────────────────────────────
     const tStr = Math.ceil(_infTimeLeft)+'s';
     // Urgency thresholds scaled to 180 s: red <30 s, amber <60 s, green otherwise.
     const urgency = _infTimeLeft<30?'color:#f44':_infTimeLeft<60?'color:#fa4':'color:#4f4';
-
-    // Last-survivor arrow for infected player: show direction + distance.
-    let lastSurvivorPin = '';
     if(window._infLastSurvivorTarget && playerAlive && G.player.team===1){
       const tgt = window._infLastSurvivorTarget;
       const dx = tgt.x - G.player.x, dy = tgt.y - G.player.y;
@@ -7606,8 +7730,8 @@ setTimeout(()=>{
       <div style="font-family:'Orbitron';font-size:9px;color:#39ff14;letter-spacing:2px;margin-bottom:3px;">🦠 INFECTION</div>
       <div style="font-size:11px;margin-bottom:3px;"><span style="${urgency}">⏱ ${tStr}</span></div>
       <div style="display:flex;gap:10px;font-size:10px;margin-bottom:3px;">
-        <span style="color:#4f4">🟢 ${totalSurvivors} surviving</span>
-        <span style="color:#f44">🦠 ${totalInfected} infected</span>
+        <span style="color:#4f4">🟢 ${totalSurvivorsPost2} surviving</span>
+        <span style="color:#f44">🦠 ${totalInfectedPost2} infected</span>
       </div>
       <div style="font-size:10px;font-weight:bold;color:${G.player.team===0?'#39ff14':'#f44'}">
         ${G.player.team===0?'🟢 YOU: SURVIVOR':'🦠 YOU: INFECTED'}
@@ -7627,11 +7751,8 @@ setTimeout(()=>{
         if(G.player.dead){ G.player.dead=false; G.player.hp=60; }
         document.getElementById('hudRespawn').classList.remove('vis');
       } else {
-        _setInfected(victim);
-        // Also award killer a kill in scores
-        const kn = killer.name || '???';
-        if(!G.scores[kn]) G.scores[kn]={k:0,d:0,score:0};
-        G.scores[kn].k++;  G.scores[kn].score += 100;
+        // Revive NPC as infected (undo death — infection not elimination)
+        _setInfected(victim); // sets team=1, _infected=true, hp=maxHp, dead=false
         addGChat('SERVER', `🦠 ${victim.name} was infected by a bullet!`);
       }
     }
