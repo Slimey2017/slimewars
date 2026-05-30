@@ -763,6 +763,8 @@ function handleMessage(ws, msg) {
       });
       // Re-evaluate last-survivor tracking after every team change
       checkInfectionLastSurvivor(room);
+      // Check if all players are now infected (infected win condition)
+      checkInfectionWin(room);
       break;
     }
 
@@ -781,6 +783,20 @@ function handleMessage(ws, msg) {
   }
 }
  
+// ─── Infection: win condition check ──────────────────────────────
+// Called after any infTeam change. If zero survivors remain, ends the game.
+function checkInfectionWin(room) {
+  if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  let survivors = 0;
+  room.players.forEach(rp => {
+    const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+    if (!rp.dead && team === 0) survivors++;
+  });
+  if (survivors === 0) {
+    endGame(room, 'INFECTED WIN', null);
+  }
+}
+
 // ─── Infection: last-survivor tracker ─────────────────────────────
 // Called whenever a player's infTeam changes or a kill is confirmed.
 // If exactly one survivor (infTeam===0, not dead) remains, broadcasts
