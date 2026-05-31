@@ -94,10 +94,11 @@ function tickKOTH(room, dtSec) {
   k.hillTimer -= dtSec;
   if (k.hillTimer <= 0) {
     k.hillTimer = KOTH_ROTATE_TIME;
-    const zone = k.zones[k.hillIdx];
-    zone.captureProgress = 0;
-    zone.captured = null;
+    // Advance index FIRST, then reset the new active zone
     k.hillIdx = (k.hillIdx + 1) % k.zones.length;
+    const newZone = k.zones[k.hillIdx];
+    newZone.captureProgress = 0;
+    newZone.captured = null;
     broadcast(room, {
       type   : 'koth_hill_moved',
       hillIdx: k.hillIdx,
@@ -714,6 +715,10 @@ function handleMessage(ws, msg) {
         if (room.mode === 'infection' && rp.infTeam === undefined) rp.infTeam = 0;
       }
       broadcast(room, { type: 'player_respawned', socketId: player.socketId, x: msg.x, y: msg.y }, ws);
+      // Re-broadcast infTeam on respawn so all clients stay in sync (infection mode)
+      if (room.mode === 'infection' && rp) {
+        broadcast(room, { type: 'infection_team', socketId: player.socketId, team: rp.infTeam || 0 });
+      }
       break;
     }
  
@@ -913,6 +918,11 @@ function leaveRoom(ws) {
   room.players.delete(player.socketId);
   delete room.scores[player.socketId];
   broadcast(room, { type: 'player_left', socketId: player.socketId, name: player.name, players: getLobbyPlayers(room) });
+  // Migrate host if the host just left
+  if (room.hostId === player.socketId) {
+    room.hostId = room.players.keys().next().value || null;
+    if (room.hostId) broadcast(room, { type: 'host_changed', hostId: room.hostId });
+  }
   if (room.players.size === 0 && room.startTimer) {
     clearInterval(room.startTimer);
     room.startTimer = null;
