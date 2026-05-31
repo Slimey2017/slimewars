@@ -805,6 +805,11 @@ function addGChatRoom(room, text) {
 
 function checkInfectionWin(room) {
   if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  // Grace period: don't check for wins until the infection phase has been running
+  // for at least 3 seconds. This prevents false wins before clients have synced
+  // their infTeam assignments back to the server.
+  const elapsed = (Date.now() - (room._infStartedAt || Date.now())) / 1000;
+  if (elapsed < 3) return;
   let survivors = 0;
   room.players.forEach(rp => {
     const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
@@ -816,6 +821,9 @@ function checkInfectionWin(room) {
 // Survivors win immediately if there are 0 infected left alive (attrition win)
 function checkInfectionNoSurvivors(room) {
   if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  // Grace period: don't check until teams are properly synced from clients
+  const elapsed = (Date.now() - (room._infStartedAt || Date.now())) / 1000;
+  if (elapsed < 3) return;
   let infected = 0;
   room.players.forEach(rp => {
     const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
@@ -829,6 +837,9 @@ function checkInfectionNoSurvivors(room) {
  
 function checkInfectionLastSurvivor(room) {
   if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  // Grace period: don't broadcast last-survivor alerts until teams are synced
+  const elapsed = (Date.now() - (room._infStartedAt || Date.now())) / 1000;
+  if (elapsed < 3) return;
   const survivors = [];
   room.players.forEach((rp, sid) => {
     const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
@@ -992,6 +1003,8 @@ function startGame(room) {
   if (room.mode === 'infection' && room.infState.firstInfectedId) {
     const fid   = room.infState.firstInfectedId;
     const infRp = room.players.get(fid);
+    // Record when infection actually started for grace-period checks
+    room._infStartedAt = Date.now();
     // Small delay so clients have time to finish loading the game world
     setTimeout(() => {
       if (room.state !== 'ingame') return;
@@ -1001,7 +1014,11 @@ function startGame(room) {
       // Tell every client about the team assignment
       broadcast(room, { type: 'infection_team', socketId: fid, team: 1 });
       addGChatRoom(room, `🦠 ${infRp ? infRp.name : '???'} has been chosen as the first INFECTED!`);
-      checkInfectionLastSurvivor(room);
+      // Delay the first last-survivor check further (4 s) so all clients have
+      // had time to echo back their infTeam via the 'infection_team' message.
+      setTimeout(() => {
+        if (room.state === 'ingame') checkInfectionLastSurvivor(room);
+      }, 3500);
     }, 500);
   }
 }
@@ -1062,6 +1079,7 @@ function endGame(room, winnerName, winnerSocketId) {
       room.scores = {};
       room.koth   = null;
       room.infState = { phase: 'lobby', timeLeft: 180, firstInfectedId: null };
+      room._infStartedAt = null;
       room.rematchVotes = new Set();
       room.players.forEach((p, sid) => {
         p.ready = false; p.kills = 0; p.deaths = 0;
@@ -1127,12 +1145,14 @@ setInterval(() => {
         endGame(room, survivors > 0 ? 'SURVIVORS WIN' : 'INFECTED WIN', null);
       } else {
         // Check attrition win: if no infected remain alive, survivors win immediately
+        // Only check after grace period so newly-started games don't falsely win
+        const infElapsed = (Date.now() - (room._infStartedAt || Date.now())) / 1000;
         let infected = 0;
         room.players.forEach(rp => {
           const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
           if (!rp.dead && team === 1) infected++;
         });
-        if (infected === 0) {
+        if (infected === 0 && infElapsed >= 3) {
           room.infState.phase = 'over';
           addGChatRoom(room, '🏆 No infected remain — survivors win by attrition!');
           endGame(room, 'SURVIVORS WIN', null);
