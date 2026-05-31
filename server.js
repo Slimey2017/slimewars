@@ -405,7 +405,7 @@ function handleMessage(ws, msg) {
         hp: msg.hp, armor: msg.armor, dead: msg.dead,
         slotIdx: msg.slotIdx, inv: msg.inv,
         skin: rp.skin, hat: rp.hat, face: rp.face,
-        team: rp.team, name: rp.name,
+        team: rp.team, infTeam: rp.infTeam, name: rp.name,
       }, ws);
       break;
     }
@@ -447,11 +447,16 @@ function handleMessage(ws, msg) {
       // Friendly fire checks
       if (room.mode === 'tdm' && targetRp.team === player.team) break;
       if (room.mode === 'infection') {
-        const attackerRp  = room.players.get(player.socketId);
-        const attackerTeam = attackerRp
+        const attackerRp   = room.players.get(player.socketId);
+        // Server record is authoritative; fall back to client-reported team only if
+        // the server hasn't received an infection_team sync yet (e.g. very first tick).
+        const serverAttTeam = attackerRp
           ? (attackerRp.infTeam !== undefined ? attackerRp.infTeam : attackerRp.team)
-          : player.team;
-        const victimTeam  = targetRp.infTeam !== undefined ? targetRp.infTeam : targetRp.team;
+          : undefined;
+        const attackerTeam = serverAttTeam !== undefined
+          ? serverAttTeam
+          : (msg.attackerTeam !== undefined ? (msg.attackerTeam === 1 ? 1 : 0) : 0);
+        const victimTeam   = targetRp.infTeam !== undefined ? targetRp.infTeam : targetRp.team;
         if (attackerTeam === victimTeam) break;
       }
  
@@ -481,8 +486,14 @@ function handleMessage(ws, msg) {
         // ── Infection: bullet kill = infect, not eliminate ─────────
         if (room.mode === 'infection') {
           const attackerRp  = room.players.get(player.socketId);
-          const attackerTeam = attackerRp
+          let attackerTeam = attackerRp
             ? (attackerRp.infTeam !== undefined ? attackerRp.infTeam : attackerRp.team) : 0;
+          // If server record says survivor but client says infected, trust client and sync server
+          if (attackerTeam === 0 && msg.attackerTeam === 1) {
+            attackerTeam = 1;
+            if (attackerRp) attackerRp.infTeam = 1;
+            player.infTeam = 1;
+          }
           if (attackerTeam === 1) {
             // Revive victim as infected instead of killing them
             targetRp.dead    = false;
@@ -502,6 +513,8 @@ function handleMessage(ws, msg) {
             addGChatRoom(room, `🦠 ${targetRp.name} was infected by ${player.name}!`);
             checkInfectionLastSurvivor(room);
             checkInfectionWin(room);
+            // Also check: if no survivors remain alive (all infected), infected win
+            checkInfectionNoSurvivors(room);
             // Credit the infector a kill in scores
             const ks = getOrInitScore(room, player.socketId, player.name);
             ks.k++; ks.score += 100;
@@ -799,6 +812,20 @@ function checkInfectionWin(room) {
   });
   if (survivors === 0) endGame(room, 'INFECTED WIN', null);
 }
+
+// Survivors win immediately if there are 0 infected left alive (attrition win)
+function checkInfectionNoSurvivors(room) {
+  if (room.mode !== 'infection' || room.state !== 'ingame') return;
+  let infected = 0;
+  room.players.forEach(rp => {
+    const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+    if (!rp.dead && team === 1) infected++;
+  });
+  if (infected === 0) {
+    addGChatRoom(room, '🏆 No infected remain — survivors win by attrition!');
+    endGame(room, 'SURVIVORS WIN', null);
+  }
+}
  
 function checkInfectionLastSurvivor(room) {
   if (room.mode !== 'infection' || room.state !== 'ingame') return;
@@ -941,9 +968,16 @@ function startGame(room) {
   });
   // Init KOTH state server-side
   if (room.mode === 'koth') initKOTH(room);
-  // Init infection state
+  // Init infection state — pick one random player as the first infected
   if (room.mode === 'infection') {
-    room.infState = { phase: 'running', timeLeft: 180, firstInfectedId: null };
+    const playerIds = [...room.players.keys()];
+    const firstInfectedId = playerIds[Math.floor(Math.random() * playerIds.length)];
+    room.infState = { phase: 'running', timeLeft: 180, firstInfectedId };
+    // Mark that player as infected before game_start goes out
+    const infRp = room.players.get(firstInfectedId);
+    if (infRp) infRp.infTeam = 1;
+    const infPlayer = [...players.entries()].find(([,p]) => p.socketId === firstInfectedId)?.[1];
+    if (infPlayer) infPlayer.infTeam = 1;
   }
   broadcast(room, {
     type: 'game_start',
@@ -953,6 +987,22 @@ function startGame(room) {
   // Send initial KOTH state
   if (room.mode === 'koth') {
     broadcast(room, { type: 'koth_sync', koth: serializeKOTH(room.koth) });
+  }
+  // Infection: tell everyone who the first infected is, and tell that player directly
+  if (room.mode === 'infection' && room.infState.firstInfectedId) {
+    const fid   = room.infState.firstInfectedId;
+    const infRp = room.players.get(fid);
+    // Small delay so clients have time to finish loading the game world
+    setTimeout(() => {
+      if (room.state !== 'ingame') return;
+      // Tell the chosen player they are infected
+      const infWs = wsBySocketId(fid);
+      if (infWs) send(infWs, { type: 'you_infected', killerName: 'SERVER', isFirstInfected: true });
+      // Tell every client about the team assignment
+      broadcast(room, { type: 'infection_team', socketId: fid, team: 1 });
+      addGChatRoom(room, `🦠 ${infRp ? infRp.name : '???'} has been chosen as the first INFECTED!`);
+      checkInfectionLastSurvivor(room);
+    }, 500);
   }
 }
  
@@ -1076,10 +1126,22 @@ setInterval(() => {
         });
         endGame(room, survivors > 0 ? 'SURVIVORS WIN' : 'INFECTED WIN', null);
       } else {
-        // Broadcast infection timer to all clients every tick
-        broadcast(room, { type: 'infection_tick', timeLeft: room.infState.timeLeft });
-        // Refresh last-survivor pin
-        if (room.infState.phase === 'running') checkInfectionLastSurvivor(room);
+        // Check attrition win: if no infected remain alive, survivors win immediately
+        let infected = 0;
+        room.players.forEach(rp => {
+          const team = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+          if (!rp.dead && team === 1) infected++;
+        });
+        if (infected === 0) {
+          room.infState.phase = 'over';
+          addGChatRoom(room, '🏆 No infected remain — survivors win by attrition!');
+          endGame(room, 'SURVIVORS WIN', null);
+        } else {
+          // Broadcast infection timer to all clients every tick
+          broadcast(room, { type: 'infection_tick', timeLeft: room.infState.timeLeft });
+          // Refresh last-survivor pin
+          if (room.infState.phase === 'running') checkInfectionLastSurvivor(room);
+        }
       }
     }
 
