@@ -1242,6 +1242,15 @@ function handleServerMsg(msg) {
       delete remotePlayers[msg.socketId];
       break;
 
+    case 'host_changed': {
+      const fsBtn = document.getElementById('forceStartBtn');
+      if (fsBtn) fsBtn.style.display = msg.hostId === mySocketId ? '' : 'none';
+      const hcBtn = document.getElementById('hostControlsBtn');
+      if (hcBtn) hcBtn.style.display = msg.hostId === mySocketId ? '' : 'none';
+      if (msg.hostId === mySocketId) addLobbyMsg('SERVER', 'You are now the host!');
+      break;
+    }
+
     case 'lobby_players':
       renderRealLobbyPlayers(msg.players);
       break;
@@ -2600,6 +2609,14 @@ function playerPickup(weaponId){
     SND.pickup();
     return true;
   }
+  if(weaponId===-4){ // piercing rounds
+    let piercingDur=15;
+    G._piercingTimer=(G._piercingTimer||0)+piercingDur;
+    G._piercingActive=true;
+    showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (15s)');
+    SND.pickup&&SND.pickup();
+    return true;
+  }
   for(let i=0;i<MAX_SLOTS;i++){
     if(p.inv[i]&&p.inv[i].weaponId===weaponId){
       p.inv[i].curAmmo=getWeaponDef(weaponId).max;
@@ -2755,6 +2772,7 @@ function spawnBullet(owner,weapon,angle){
         laser:weapon.laser,
         boomerang:weapon.boomerang,boomerangAngle:a,boomerangDist:0,boomerangReturn:false,
         customColor:bColor,
+        piercing:!!(owner.isPlayer&&G._piercingActive),
       });
     }
   }
@@ -3310,6 +3328,11 @@ function updatePlayer(dt){
     G.uavTimer-=dt; G.uavAngle+=dt*1.5;
     if(G.uavTimer<=0) G.uavActive=false;
   }
+  // Piercing rounds timer
+  if(G._piercingActive){
+    G._piercingTimer=(G._piercingTimer||0)-dt;
+    if(G._piercingTimer<=0){ G._piercingActive=false; G._piercingTimer=0; showNotif('🔵 Piercing rounds expired',1500); }
+  }
 
   // Airstrike
   G.airstrikes.forEach(a=>{ a.t-=dt; if(a.t<=0&&!a.exploded){ a.exploded=true; explode(a.x,a.y,200,120,G.player); } });
@@ -3471,7 +3494,7 @@ function updateBullets(dt){
         if(Math.hypot(t.x-b.x,t.y-b.y)<t.r){
           if(b.explosive>0)explode(b.x,b.y,b.explosive,b.dmg,b.owner); else dealDamage(b.owner,t,b.dmg);
           if(b.poison&&!t.dead){ t._poison={dmg:b.poisonDmg,dur:b.poisonDur,owner:b.owner}; }
-          if(!b.boomerang) hit=true; // boomerang can keep going
+          if(!b.boomerang&&!b.piercing) hit=true; // piercing bullets keep traveling
         }
       }
       // Fix 1a: Remote multiplayer players as targets for local player bullets
@@ -3908,11 +3931,6 @@ function drawPickups(){
       ctx.fillText('🛡️',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(100,180,255,.9)'; ctx.font='bold 10px sans-serif';
       ctx.textBaseline='top'; ctx.fillText('ARMOR',sp.x,sp.y+bob+18);
-    } else if(sp.weaponId===-4){
-      // Piercing rounds
-      activatePiercing();
-      sp.timer=45;
-      showNotif('🔵 PIERCING ROUNDS! Bullets pierce through enemies (15s)');
     } else if(sp.weaponId===-2){
       // Medkit (+25 HP)
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
@@ -3933,13 +3951,14 @@ function drawPickups(){
       ctx.textBaseline='top'; ctx.fillText('FULL HEAL',sp.x,sp.y+bob+20);
     } else {
       const w=WEAPONS_BASE[sp.weaponId];
+      if(!w) { ctx.textBaseline='alphabetic'; ctx.textAlign='left'; return; }
       ctx.beginPath(); ctx.arc(sp.x,sp.y+bob,16+pulse,0,Math.PI*2);
       ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fill();
       ctx.strokeStyle=w.color||'#aaa'; ctx.lineWidth=2; ctx.stroke();
       ctx.font='13px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(w.icon||'🔫',sp.x,sp.y+bob);
       ctx.fillStyle='rgba(255,255,255,.85)'; ctx.font='bold 10px sans-serif';
-      ctx.textBaseline='top'; ctx.fillText(w.name,sp.x,sp.y+bob+18);
+      ctx.textBaseline='top'; ctx.fillText(w.name||'',sp.x,sp.y+bob+18);
     }
     ctx.textBaseline='alphabetic'; ctx.textAlign='left';
   });
@@ -4005,9 +4024,21 @@ function drawAirstrikes(){
 
 function drawTrailParticles(){
   trailParticles.forEach(p=>{
-    ctx.font=`${12*(p.t/.8)}px serif`; ctx.textAlign='center';
-    ctx.globalAlpha=p.t/.8;
-    ctx.fillText(p.emoji,p.x,p.y);
+    if(p.dashParticle){
+      // Dash particles: colored circles, fade out over their lifetime
+      const alpha = Math.max(0, p.t / 0.35);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color + alpha + ')';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3 + (1-alpha)*4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.font=`${12*(p.t/.8)}px serif`; ctx.textAlign='center';
+      ctx.globalAlpha=p.t/.8;
+      ctx.fillText(p.emoji,p.x,p.y);
+    }
   });
   ctx.globalAlpha=1; ctx.textAlign='left';
 }
@@ -4758,6 +4789,7 @@ function startGameFromLobby(){
     uavActive:false,uavTimer:0,uavAngle:0,airstrikes:[],
     respawnTimer:5,nukeReady:false,
     mines:[],smokeClouds:[],_wsBroadcastTick:0,
+    _piercingActive:false,_piercingTimer:0,
   };
   // Reset tree hide state for new game
   treeHideState.active=false; treeHideState.timer=0; treeHideState.cooldown=0;
@@ -6317,7 +6349,8 @@ function tryDash(){
     trailParticles.push({
       x:G.player.x, y:G.player.y,
       vx:Math.cos(a)*80, vy:Math.sin(a)*80,
-      life:0.35, maxLife:0.35,
+      t:0.35,
+      dashParticle: true,
       color:'rgba(100,200,255,',
     });
   }
@@ -6479,15 +6512,6 @@ function drawCratesOnMinimap(mctx, scale){
     mctx.strokeStyle='#fbbf24'; mctx.lineWidth=1; mctx.stroke();
   });
 }
-
-// Patch render to draw supply crates
-const _origRender = render;
-window.render = function(){
-  _origRender();
-};
-// We need to hook into the draw cycle differently — patch drawPickups call area
-// Actually we'll hook into the game loop update side:
-const _origGameLoopUpdate = null; // inline — handle via the gameLoop patching below
 
 // ─── HOST CONTROLS ────────────────────────────────────────────────
 function toggleHostControls(){
