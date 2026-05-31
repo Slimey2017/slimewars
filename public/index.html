@@ -1326,14 +1326,22 @@ function handleServerMsg(msg) {
     G.player.flicker = 0.6;
 
     if (G.player.hp <= 0 && !G.player.dead) {
-      G.player.dead = true;
-      G.player.hp   = 0;
-      wsSend({
-        type      : 'player_killed',
-        victimId  : mySocketId,
-        victimName: playerName,
-        weapon    : msg.weapon,
-      });
+      // In infection mode, a survivor hit to 0 HP receives 'you_infected',
+      // NOT 'you_died'. Don't mark dead or report player_killed here —
+      // wait for that message to avoid the player getting stuck dead.
+      if (gameMode === 'infection' && G.player.team === 0) {
+        // Clamp to 1 HP and let you_infected resolve the state
+        G.player.hp = 1;
+      } else {
+        G.player.dead = true;
+        G.player.hp   = 0;
+        wsSend({
+          type      : 'player_killed',
+          victimId  : mySocketId,
+          victimName: playerName,
+          weapon    : msg.weapon,
+        });
+      }
     }
   }
   break;
@@ -3473,7 +3481,7 @@ function updateBullets(dt){
           const rp=remoteArr[ri];
           if(!rp||rp.dead||!rp.x)continue;
           // Block same-team hits in TDM and infection
-          const myTeam = G.player ? G.player.team : undefined;
+          const myTeam = G.player ? (gameMode==='infection' ? (G.player.infTeam !== undefined ? G.player.infTeam : G.player.team) : G.player.team) : undefined;
           const rpTeam = rp.infTeam !== undefined ? rp.infTeam : rp.team;
           if((gameMode==='tdm'||gameMode==='infection') && myTeam !== undefined && rpTeam === myTeam) continue;
           const rpR=18;
@@ -7392,6 +7400,7 @@ function _setInfected(npc){
 function _infectPlayer(){
   if(!G.player||G.player.team===1)return;
   G.player.team=1;
+  G.player.infTeam=1; // keep infTeam in sync with team for HUD/bullet checks
   showNotif('🦠 YOU ARE INFECTED! Hunt survivors!',3000);
   addGChat('SERVER',`🦠 ${playerName} has been infected!`);
   G.shakeX=20; G.shakeY=20;
@@ -7640,7 +7649,16 @@ setTimeout(()=>{
   const _origUpdateInf = window.updateInfection || updateInfection;
   window.updateInfection = function(dt){
     if(!isInfection()||_infPhase!=='running') return;
-    _infTimeLeft = Math.max(0, _infTimeLeft - dt);
+
+    // In online mode the server is authoritative for the timer (sent via infection_tick)
+    // and for win conditions. Only tick locally in solo/offline mode.
+    if(!currentRoomId){
+      _infTimeLeft = Math.max(0, _infTimeLeft - dt);
+    }
+    // If server-pushed timer hit zero, mark phase over
+    if(_infTimeLeft <= 0 && !currentRoomId){
+      // offline win check handled below
+    }
 
     // Infected NPC respawn (5 s)
     G.npcs.forEach(n=>{
@@ -7736,10 +7754,10 @@ setTimeout(()=>{
     const totalSurvivorsPost2 = survivorNPCsPost2.length + (playerSurvivorPost2?1:0);
     const totalInfectedPost2 = G.npcs.filter(n=>!n.dead&&n.team===1).length + (playerAlive && G.player.team===1 ? 1 : 0);
 
-    if(totalSurvivorsPost2 === 0){ _infPhase='over'; endGame('INFECTED WIN'); return; }
-    if(_infTimeLeft <= 0){ _infPhase='over'; endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
+    if(totalSurvivorsPost2 === 0 && !currentRoomId){ _infPhase='over'; endGame('INFECTED WIN'); return; }
+    if(_infTimeLeft <= 0 && !currentRoomId){ _infPhase='over'; endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
     // ── FIX: No infected remain — survivors win immediately (no one left to infect them) ──
-    if(totalInfectedPost2 === 0 && totalSurvivorsPost2 > 0){
+    if(totalInfectedPost2 === 0 && totalSurvivorsPost2 > 0 && !currentRoomId){
       _infPhase='over';
       showNotif('🏆 ALL INFECTED ELIMINATED — SURVIVORS WIN!', 3500);
       addGChat('SERVER','🏆 No infected remain — survivors win by attrition!');
@@ -8515,17 +8533,33 @@ window.startGameFromLobby = function(){
 
     // ── Infection: remote player's team changed ──────────────────
     if(msg.type === 'infection_team'){
+      // Apply to remote players map
       const rp = remotePlayers[msg.socketId];
       if(rp){
         rp.infTeam = msg.team;
         rp.team    = msg.team; // keep .team in sync so HUD survivor/infected counts are accurate
+      }
+      // Also apply to our own G.player if this is about us
+      // (can happen if server echoes back the broadcast we triggered,
+      //  or if first-infected assignment arrives via broadcast)
+      if(msg.socketId === mySocketId && G.player){
+        G.player.team   = msg.team;
+        G.player.infTeam = msg.team;
+        if(msg.team === 1 && !G.player.dead){
+          // Make sure the HUD KOTH panel switches to infected view immediately
+          document.getElementById('hudKOTH') && (document.getElementById('hudKOTH').style.display='block');
+        }
       }
       return;
     }
 
     // ── Infection: server tells US we got infected ───────────────
     if(msg.type === 'you_infected'){
-      if(G.player && !G.player.dead){
+      if(G.player){
+        // Always process you_infected even if dead=true (can happen if
+        // you_hit briefly set dead before this message arrived)
+        G.player.dead = false;
+        document.getElementById('hudRespawn').classList.remove('vis');
         _infectPlayer(); // sets our team to 1, changes color, etc.
         if(msg.isFirstInfected){
           // We are the randomly chosen first infected — start at full HP
