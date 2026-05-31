@@ -7756,14 +7756,6 @@ setTimeout(()=>{
 
     if(totalSurvivorsPost2 === 0 && !currentRoomId){ _infPhase='over'; endGame('INFECTED WIN'); return; }
     if(_infTimeLeft <= 0 && !currentRoomId){ _infPhase='over'; endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
-    // ── FIX: No infected remain — survivors win immediately (no one left to infect them) ──
-    if(totalInfectedPost2 === 0 && totalSurvivorsPost2 > 0 && !currentRoomId){
-      _infPhase='over';
-      showNotif('🏆 ALL INFECTED ELIMINATED — SURVIVORS WIN!', 3500);
-      addGChat('SERVER','🏆 No infected remain — survivors win by attrition!');
-      endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN');
-      return;
-    }
 
     // Track last survivor for minimap (live position update each frame)
     if(!currentRoomId){
