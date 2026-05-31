@@ -2678,11 +2678,14 @@ function spawnBullet(owner,weapon,angle){
     }});
     // Multiplayer: notify server about melee hits on remote players
     if(owner.isPlayer && currentRoomId){
+      const myTeam = G.player ? G.player.team : undefined;
       Object.values(remotePlayers).forEach(rp=>{
         if(!rp||rp.dead||!rp.x)return;
-        if(gameMode==='tdm'&&rp.team===owner.team)return;
+        const rpTeam = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+        if((gameMode==='tdm'||gameMode==='infection') && myTeam !== undefined && rpTeam === myTeam) return;
         if(Math.hypot(rp.x-owner.x,rp.y-owner.y)<weapon.range+(rp.r||14)){
-          wsSend({ type:'hit_player', targetId:rp.socketId, damage:weapon.dmg+Math.random()*20|0, weapon:weapon.name });
+          wsSend({ type:'hit_player', targetId:rp.socketId, damage:weapon.dmg+Math.random()*20|0,
+            weapon:weapon.name, attackerTeam: myTeam, mode: gameMode });
         }
       });
     }
@@ -2798,14 +2801,17 @@ function explode(x,y,radius,dmg,owner){
   });
   // Notify server about remote players caught in explosion (multiplayer)
   if(owner&&owner.isPlayer&&currentRoomId){
+    const myTeam = G.player ? G.player.team : undefined;
     Object.values(remotePlayers).forEach(rp=>{
       if(!rp||rp.dead||!rp.x)return;
-      if(gameMode==='tdm'&&rp.team===owner.team)return;
+      const rpTeam = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+      if((gameMode==='tdm'||gameMode==='infection') && myTeam !== undefined && rpTeam === myTeam) return;
       const d=Math.hypot(rp.x-x,rp.y-y);
       if(d<radius+18){
         const falloff=1-d/radius;
         const exDmg=Math.max(1,(dmg*falloff)|0);
-        wsSend({type:'hit_player',targetId:rp.socketId,damage:exDmg,weapon:'EXPLOSION'});
+        wsSend({type:'hit_player',targetId:rp.socketId,damage:exDmg,weapon:'EXPLOSION',
+          attackerTeam: myTeam, mode: gameMode});
       }
     });
   }
@@ -3466,13 +3472,18 @@ function updateBullets(dt){
         for(let ri=0;ri<remoteArr.length&&!hit;ri++){
           const rp=remoteArr[ri];
           if(!rp||rp.dead||!rp.x)continue;
-          // Use live team from remotePlayers (authoritative)
-          if(gameMode==='tdm'&&rp.team===G.player.team)continue;
+          // Block same-team hits in TDM and infection
+          const myTeam = G.player ? G.player.team : undefined;
+          const rpTeam = rp.infTeam !== undefined ? rp.infTeam : rp.team;
+          if((gameMode==='tdm'||gameMode==='infection') && myTeam !== undefined && rpTeam === myTeam) continue;
           const rpR=18;
           if(Math.hypot(rp.x-b.x,rp.y-b.y)<rpR){
             // Notify server: we hit this remote player
+            // Include attackerTeam + mode so server can handle infection correctly
             wsSend({type:'hit_player', targetId:rp.socketId, damage:b.dmg,
-              weapon:playerWeapon()?.def?.name||'?'});
+              weapon:playerWeapon()?.def?.name||'?',
+              attackerTeam: myTeam,
+              mode: gameMode});
             // Server will respond with a 'hitmarker' message — don't call showHitmarker here
             if(!b.boomerang) hit=true;
           }
@@ -4100,8 +4111,12 @@ function updateHUD(){
     document.getElementById('scoreDisp').innerHTML=`<span style="color:#39ff14">${pPts}</span> — <span style="color:#f44">${ePts}</span>`;
     document.getElementById('scoreLbl').textContent=`YOU / ENEMY · ${KOTH_WIN} TO WIN`;
   } else if(gameMode==='infection'){
-    const sCount=G.npcs.filter(n=>!n.dead&&n.team===0).length+(G.player.team===0?1:0);
-    const iCount=G.npcs.filter(n=>!n.dead&&n.team===1).length+(G.player.team===1?1:0);
+    // In online mode, also count remote players by their infection team
+    const remoteVals = currentRoomId ? Object.values(remotePlayers) : [];
+    const remoteSurvivors = remoteVals.filter(rp=>rp&&!rp.dead&&(rp.infTeam!==undefined?rp.infTeam:rp.team)===0).length;
+    const remoteInfected  = remoteVals.filter(rp=>rp&&!rp.dead&&(rp.infTeam!==undefined?rp.infTeam:rp.team)===1).length;
+    const sCount=G.npcs.filter(n=>!n.dead&&n.team===0).length+(G.player.team===0?1:0)+remoteSurvivors;
+    const iCount=G.npcs.filter(n=>!n.dead&&n.team===1).length+(G.player.team===1?1:0)+remoteInfected;
     document.getElementById('scoreDisp').innerHTML=`<span style="color:#4f4">${sCount}</span> — <span style="color:#f44">${iCount}</span>`;
     document.getElementById('scoreLbl').textContent=`SURVIVORS / INFECTED · ⏱${Math.ceil(_infTimeLeft)}s`;
   } else if(gameMode==='gungame'){
@@ -4776,7 +4791,9 @@ function startGameFromLobby(){
   G.scores[myScoreKey]={k:0,d:0,score:0,name:playerName};
   // Only spawn NPC bots in offline/solo mode — online mode uses real remote players
   if(!currentRoomId){
-    const npcCount=Math.max(lobbyPlayers.length,11);
+    // Use exact lobby size for solo practice (respects SOLO_BOT_COUNT / custom counts).
+    // Infection with only 1 NPC is valid — they start infected and the timer runs.
+    const npcCount=lobbyPlayers.length > 0 ? lobbyPlayers.length : 11;
     for(let i=0;i<npcCount;i++){
       const sp=getSpawnPoint([G.player,...G.npcs]);
       const team=gameMode==='tdm'?(i%2===0?1:0):undefined;
@@ -4887,7 +4904,7 @@ function quickJoinOnline(){
 }
 
 // ─── SOLO PRACTICE SETUP ─────────────────────────────────────────
-let _soloSettings = { map: 'city', mode: 'ffa', difficulty: 'medium' };
+let _soloSettings = { map: 'city', mode: 'ffa', difficulty: 'medium', botCount: 11 };
 
 function startSoloPractice(){
   // Show the solo setup modal instead of jumping straight in
@@ -4933,6 +4950,16 @@ function openSoloModal(){
         </div>
       </div>
 
+      <div>
+        <div style="font-size:10px;color:#3a6a8a;letter-spacing:3px;text-transform:uppercase;margin-bottom:8px;">PLAYER COUNT (BOTS)</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button onclick="setSoloBotCount(Math.max(1,_soloSettings.botCount-1))" style="background:rgba(0,0,0,.5);border:1px solid #2a4060;color:#aac;font-family:'Share Tech Mono';font-size:16px;padding:4px 12px;cursor:pointer;border-radius:3px;line-height:1;">−</button>
+          <div style="font-family:'Orbitron';font-size:20px;color:#fff;min-width:32px;text-align:center;" id="soloBotCountDisplay">11</div>
+          <button onclick="setSoloBotCount(Math.min(11,_soloSettings.botCount+1))" style="background:rgba(0,0,0,.5);border:1px solid #2a4060;color:#aac;font-family:'Share Tech Mono';font-size:16px;padding:4px 12px;cursor:pointer;border-radius:3px;line-height:1;">+</button>
+          <div style="font-size:10px;color:#3a6a8a;letter-spacing:1px;">bots  (2–12 total players incl. you)</div>
+        </div>
+      </div>
+
       <div style="background:rgba(0,0,0,.3);border:1px solid #1e3050;border-radius:4px;padding:10px 14px;font-size:11px;color:#4a7a9a;line-height:1.7;" id="soloDiffDesc">
         🎯 MEDIUM — Balanced bots with decent aim and movement.
       </div>
@@ -4964,6 +4991,15 @@ function refreshSoloModal(){
   });
   const desc = document.getElementById('soloDiffDesc');
   if(desc) desc.textContent = SOLO_DIFF_DESC[_soloSettings.difficulty] || '';
+  // Sync bot count display
+  const countEl = document.getElementById('soloBotCountDisplay');
+  if(countEl) countEl.textContent = _soloSettings.botCount !== undefined ? _soloSettings.botCount : 11;
+}
+
+function setSoloBotCount(n){
+  _soloSettings.botCount = Math.max(1, Math.min(11, n));
+  const el = document.getElementById('soloBotCountDisplay');
+  if(el) el.textContent = _soloSettings.botCount;
 }
 
 function setSoloPick(key, val, btn){
@@ -4991,7 +5027,8 @@ function launchSoloPractice(){
 
   const diff = _soloSettings.difficulty;
   const skill = SOLO_BOT_SKILL[diff] || 0.45;
-  const botCount = SOLO_BOT_COUNT[diff] || 11;
+  // Use the manually-chosen bot count; fall back to difficulty preset if not set.
+  const botCount = (_soloSettings.botCount !== undefined) ? _soloSettings.botCount : (SOLO_BOT_COUNT[diff] || 11);
 
   lobbyPlayers = [];
   const used = new Set();
@@ -7701,6 +7738,14 @@ setTimeout(()=>{
 
     if(totalSurvivorsPost2 === 0){ _infPhase='over'; endGame('INFECTED WIN'); return; }
     if(_infTimeLeft <= 0){ _infPhase='over'; endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN'); return; }
+    // ── FIX: No infected remain — survivors win immediately (no one left to infect them) ──
+    if(totalInfectedPost2 === 0 && totalSurvivorsPost2 > 0){
+      _infPhase='over';
+      showNotif('🏆 ALL INFECTED ELIMINATED — SURVIVORS WIN!', 3500);
+      addGChat('SERVER','🏆 No infected remain — survivors win by attrition!');
+      endGame(playerSurvivorPost2 ? playerName+' & SURVIVORS WIN' : 'SURVIVORS WIN');
+      return;
+    }
 
     // Track last survivor for minimap (live position update each frame)
     if(!currentRoomId){
@@ -8284,37 +8329,47 @@ console.log('[PATCH BLOCK] All fixes applied successfully.');
   };
 })();
 
-// ─── FIX B: INFECTION INIT RACE — exactly ONE NPC starts infected ───
-// Root cause: initInfectionMode() is called in a setTimeout(100ms) but
-// multiple startGameFromLobby patches each schedule their OWN setTimeout,
-// causing double/triple inits or races where G.npcs hasn't populated yet.
-// Solution: use a reliable post-game-start hook that fires once per game.
+// ─── FIX B: INFECTION INIT ───────────────────────────────────────────
+// SOLO:   pick first infected locally (farthest NPC, or player if role=infected)
+// ONLINE: do nothing here — server picks a random real player and sends
+//         you_infected + infection_team after a 500 ms delay. The you_infected
+//         handler (FIX E) and the infection_team handler take care of the rest.
 (function(){
-  // Intercept the last startGameFromLobby patch in the chain
   const _prev = window.startGameFromLobby;
   window.startGameFromLobby = function(){
     _prev.apply(this, arguments);
-    // Cancel any pending infection inits from earlier patches
     if(window._infInitTimer) clearTimeout(window._infInitTimer);
-    // Schedule one authoritative init — 200ms so all NPCs are placed
     window._infInitTimer = setTimeout(function(){
       if(gameMode !== 'infection') return;
+
+      // ── ONLINE MODE: server is authoritative — skip local init ──
+      if(currentRoomId){
+        // Just reset timers and show the HUD; team assignments arrive
+        // via you_infected + infection_team from the server.
+        _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
+        // Everyone starts as survivor until server says otherwise
+        if(G.player) G.player.team = 0;
+        G.npcs.forEach(n=>{ n.team=0; n._infected=false; n.dead=false; n.hp=n.maxHp; });
+        document.getElementById('hudKOTH').style.display='block';
+        showNotif('🦠 INFECTION! Waiting for server to pick first infected…',2500);
+        window._infInitTimer = null;
+        return;
+      }
+
+      // ── SOLO MODE: pick first infected locally ───────────────────
       if(!G || !G.npcs || !G.npcs.length) return;
-      // Reset all teams
       G.player.team = (_soloInfectionRole === 'infected') ? 1 : 0;
       G.npcs.forEach(n=>{ n.team=0; n._infected=false; n.dead=false; n.hp=n.maxHp; });
       _infTimer=0; _infTimeLeft=_INF_TIME; _infPhase='running'; _infLastSurvivorWarned=false;
 
       if(_soloInfectionRole === 'infected'){
-        // Player is the ONLY infected — no NPC teammate
         G.player.team = 1;
-        // All NPCs stay team 0 (survivors) — player hunts them alone
         showNotif('🦠 YOU ARE INFECTED! Hunt all survivors!',3000);
         addGChat('SERVER','🦠 You are the first infected — infect all survivors to win!');
         const v=document.getElementById('hudVignette');
         if(v){ v.style.background='radial-gradient(ellipse at center,transparent 30%,rgba(0,200,0,.85) 100%)'; setTimeout(()=>v.style.background='',1500); }
       } else {
-        // Player is survivor — 1 NPC starts infected (farthest away)
+        // Pick the NPC farthest from the player as the first infected
         const sorted=[...G.npcs].sort((a,b)=>Math.hypot(b.x-G.player.x,b.y-G.player.y)-Math.hypot(a.x-G.player.x,a.y-G.player.y));
         _setInfected(sorted[0]);
         showNotif('🦠 INFECTION! Survive 3 minutes!',3000);
@@ -8461,18 +8516,30 @@ window.startGameFromLobby = function(){
     // ── Infection: remote player's team changed ──────────────────
     if(msg.type === 'infection_team'){
       const rp = remotePlayers[msg.socketId];
-      if(rp) rp.infTeam = msg.team;
-      // Don't return — fall through so kill_event / HUD still updates
+      if(rp){
+        rp.infTeam = msg.team;
+        rp.team    = msg.team; // keep .team in sync so HUD survivor/infected counts are accurate
+      }
       return;
     }
 
-    // ── Infection: server tells US we got infected by a bullet ───
+    // ── Infection: server tells US we got infected ───────────────
     if(msg.type === 'you_infected'){
       if(G.player && !G.player.dead){
-        _infectPlayer();   // sets our team to 1, changes color, etc.
-        G.player.hp = 80;
-        addGChat('SERVER', `🦠 You were infected by ${msg.killerName}!`);
-        SND.kill && SND.kill();
+        _infectPlayer(); // sets our team to 1, changes color, etc.
+        if(msg.isFirstInfected){
+          // We are the randomly chosen first infected — start at full HP
+          G.player.hp = G.player.maxHp || 100;
+          showNotif('🦠 YOU HAVE BEEN CHOSEN AS THE FIRST INFECTED! Hunt survivors!', 4000);
+          addGChat('SERVER', `🦠 ${playerName} is the first INFECTED — hunt them all down!`);
+        } else {
+          // Mid-game infection by another player's bullet
+          G.player.hp = 80;
+          addGChat('SERVER', `🦠 You were infected by ${msg.killerName}!`);
+          SND.kill && SND.kill();
+        }
+        // Broadcast our new team immediately so all peers update their remotePlayers entry
+        wsSend({ type:'infection_team', team: 1, socketId: mySocketId });
       }
       return;
     }
